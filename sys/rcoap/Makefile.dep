@@ -1,0 +1,3 @@
+USEMODULE += rust_riotmodules
+
+FEATURES_REQUIRED += rust_target

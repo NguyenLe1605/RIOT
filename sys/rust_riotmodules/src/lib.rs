@@ -12,3 +12,7 @@ pub use riot_module_lsm303agr as lsm303agr;
 
 #[cfg(feature = "riot-module-shell-democommands")]
 pub use riot_module_shell_democommands as democommands;
+
+
+#[cfg(feature = "riot-module-rcoap")]
+pub use riot_module_rcoap as rcoap;

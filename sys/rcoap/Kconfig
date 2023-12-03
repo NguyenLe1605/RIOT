@@ -1,0 +1,5 @@
+config MODULE_RCOAP
+    bool
+    prompt "rcoap" 
+    default y 
+    select  MODULE_RUST_RIOTMODULES

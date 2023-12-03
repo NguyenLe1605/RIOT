@@ -21,3 +21,4 @@ config MODULE_RUST_RIOTMODULES_STANDALONE
         This module is used when rust_riotmodules is selected, and the main
         application does not already contain Rust code through which the
         rust_riotmodules are built.
+
