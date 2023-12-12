@@ -3,7 +3,6 @@ include $(RIOTBASE)/Makefile.base
 include $(RIOTMAKE)/cargo-settings.inc.mk
 
 APPLICATION_RUST_MODULE = rcoap 
-USEMODULE += rust_riotmodules
 
 # No need to set the Cargo features enabled through the general pseudomodules:
 # They're added to the crate in cargo-targets.inc.mk no matter whether it's
