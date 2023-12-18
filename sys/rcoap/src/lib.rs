@@ -6,7 +6,7 @@
 
 pub const CONFIG_RCOAP_NOPTS_MAX: u32 = 16;
 
-pub use riot_wrappers::riot_sys::socket_udp_ept_t;
+pub use riot_wrappers::riot_sys::sock_udp_ep_t;
 pub type rcoap_method_flags_t = u16;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]

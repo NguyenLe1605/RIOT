@@ -1,5 +1,6 @@
 USEMODULE += rust_riotmodules
 USEMODULE += gnrc_sock_udp
 USEMODULE += gnrc_ipv6
+USEMODULE += sock_udp
 
 FEATURES_REQUIRED += rust_target

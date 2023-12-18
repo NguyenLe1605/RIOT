@@ -1,3 +1,2 @@
-include $(RIOTBASE)/Makefile.include
 PSEUDOMODULES += rcoap
 
