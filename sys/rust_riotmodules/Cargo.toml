@@ -12,6 +12,8 @@ publish = false
 
 riot-module-lsm303agr = { path = "../../drivers/lsm303agr", optional = true }
 riot-module-shell-democommands = { path = "../../sys/shell/democommands", optional = true }
+riot-module-gnrc-ipv6-ipsec = { path = "../../sys/net/gnrc/network_layer/ipv6/ipsec", optional= true }
+riot-module-wireguard = {path = "../../sys/wireguard", optional = true}
 
 [features]
 # This feature is just there so that rust_riotmodules_standalone can use its

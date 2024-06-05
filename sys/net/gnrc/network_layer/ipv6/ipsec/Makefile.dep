@@ -1,0 +1,2 @@
+USEMODULE += rust_riotmodules
+USEMODULE += ztimer_msec
