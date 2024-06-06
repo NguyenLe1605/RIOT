@@ -148,5 +148,7 @@ endif
 ifneq (,$(filter gnrc_tx_sync,$(USEMODULE)))
   DIRS += tx_sync
 endif
-
+ifneq (,$(filter gnrc_wireguard,$(USEMODULE)))
+  DIRS += network_layer/wireguard
+endif
 include $(RIOTBASE)/Makefile.base

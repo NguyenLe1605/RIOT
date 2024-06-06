@@ -511,3 +511,7 @@ ifneq (,$(filter gnrc_lwmac,$(USEMODULE)))
   USEMODULE += xtimer
   FEATURES_REQUIRED += periph_rtt
 endif
+
+ifneq (,$(filter gnrc_wireguard,$(USEMODULE)))
+  USEMODULE += rust_riotmodules
+endif
