@@ -51,6 +51,20 @@ USEMODULE += sock_ip
 USEMODULE += sock_udp
 USEMODULE += sock_tcp
 
+# Activate ICMPv6 error messages
+USEMODULE += gnrc_icmpv6_error
+# Specify the mandatory networking module for a IPv6 routing node
+USEMODULE += gnrc_ipv6_router_default
+# Activate ICMPv6 error messages
+USEMODULE += gnrc_icmpv6_error
+# Specify the mandatory networking module for a IPv6 routing node
+USEMODULE += gnrc_ipv6_router_default
+# Add a routing protocol
+USEMODULE += gnrc_rpl
+USEMODULE += auto_init_gnrc_rpl
+# Additional networking modules that can be dropped if not needed
+USEMODULE += gnrc_icmpv6_echo
+USEMODULE += shell_cmd_gnrc_udp
 USEMODULE += ztimer
 USEMODULE += ztimer_msec
 

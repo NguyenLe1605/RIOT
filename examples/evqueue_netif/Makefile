@@ -1,0 +1,43 @@
+# name of the application
+APPLICATION = evqueue_netif
+
+# If no BOARD is found in the environment, use this default:
+BOARD ?= native
+
+# This has to be the absolute path to the RIOT base directory:
+RIOTBASE ?= $(CURDIR)/../..
+
+USEMODULE += sock_async_event
+USEMODULE += sock_aux_local
+USEMODULE += sock_udp
+USEMODULE += sock_util
+USEMODULE += random
+USEMODULE += event_callback
+USEMODULE += event_periodic
+USEMODULE += gnrc_sock_async
+USEMODULE += ztimer_sec
+# Include packages that pull up and auto-init the link layer.
+# NOTE: 6LoWPAN will be included if IEEE802.15.4 devices are present
+USEMODULE += netdev_default
+USEMODULE += auto_init_gnrc_netif
+USEMODULE += gnrc_ipv6
+USEMODULE += shell_cmd_gnrc_udp
+# Add also the shell, some shell commands
+USEMODULE += shell
+USEMODULE += shell_cmds_default
+USEMODULE += ps
+USEMODULE += netstats_l2
+USEMODULE += netstats_ipv6
+USEMODULE += netstats_rpl
+
+CFLAGS += -DLOG_LEVEL=LOG_DEBUG -DDEBUG_ASSERT_VERBOSE
+
+# Comment this out to disable code in RIOT that does safety checking
+# which is not needed in a production environment but helps in the
+# development process:
+DEVELHELP ?= 1
+
+# Change this to 0 show compiler invocation lines by default:
+QUIET ?= 1
+
+include $(RIOTBASE)/Makefile.include
