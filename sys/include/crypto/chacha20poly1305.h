@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2018 Koen Zandberg
+ * Copyright (C) 2024 Nguyen Le Hoang Dang
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -9,10 +10,13 @@
 /**
  * @defgroup    sys_crypto_chacha20poly1305 chacha20poly1305 AEAD cipher
  * @ingroup     sys_crypto
- * @brief       Provides RFC 8439 style chacha20poly1305
+ * @brief       Provides RFC 8439 style chacha20poly1305, and xchacha20poly1305
+ * - a variant of chacha20poly1305 with an extended 24-byte nonce.
  *
  * This module provides the chacha20poly1305 AEAD symmetric cipher following
- * [rfc 8439](https://tools.ietf.org/html/rfc8439).
+ * [rfc 8439](https://tools.ietf.org/html/rfc8439), and the xchacha20poly1305
+ * variant following the
+ * [draft-arciszewski-xchacha-03](https://datatracker.ietf.org/doc/html/draft-arciszewski-xchacha-03).
  *
  * Nonces must be unique per message for a single key. They are allowed to be
  * predictable, e.g. a message counter and are allowed to be visible during
@@ -20,9 +24,10 @@
  * @{
  *
  * @file
- * @brief       Chacha20poly1305 functions
+ * @brief       Chacha20poly1305 and Xchacha20poly1305 functions
  *
  * @author      Koen Zandberg <koen@bergzand.net>
+ * @author      Nguyen Le Hoang Dang <lhdnguyen2002@gmail.com> (xchacha20poly1305)
  */
 
 #ifndef CRYPTO_CHACHA20POLY1305_H
@@ -34,9 +39,11 @@
 extern "C" {
 #endif
 
-#define CHACHA20POLY1305_KEY_BYTES      (32U)   /**< Key length in bytes */
-#define CHACHA20POLY1305_NONCE_BYTES    (12U)   /**< Nonce length in bytes */
-#define CHACHA20POLY1305_TAG_BYTES      (16U)   /**< Tag length in bytes */
+#define CHACHA20POLY1305_KEY_BYTES (32U)    /**< Key length in bytes */
+#define CHACHA20POLY1305_NONCE_BYTES (12U)  /**< Nonce length in bytes */
+#define CHACHA20POLY1305_TAG_BYTES (16U)    /**< Tag length in bytes */
+#define XCHACHA20POLY1305_NONCE_BYTES                                          \
+        (24U)                               /**< Nonce length in bytes for xchacha20 */
 
 /**
  * @brief Chacha20poly1305 state struct
@@ -92,10 +99,55 @@ void chacha20poly1305_encrypt(uint8_t *cipher, const uint8_t *msg,
  *                          long
  */
 int chacha20poly1305_decrypt(const uint8_t *cipher, size_t cipherlen,
-                             uint8_t *msg, size_t *msglen,
-                             const uint8_t *aad, size_t aadlen,
-                             const uint8_t *key, const uint8_t *nonce);
+                             uint8_t *msg, size_t *msglen, const uint8_t *aad,
+                             size_t aadlen, const uint8_t *key,
+                             const uint8_t *nonce);
 
+/**
+ * @brief Encrypt a plaintext to ciphertext and append a tag to protect the
+ * ciphertext and additional data using XChaCha20Poly1305.
+ *
+ * It is allowed to have cipher == msg as long
+ * as there is @ref CHACHA20POLY1305_TAG_BYTES space left to hold the
+ * authentication tag
+ *
+ *
+ * @param[out]  cipher      resulting ciphertext, is CHACHA20POLY1305_TAG_BYTES
+ *                          longer than the message length
+ * @param[in]   msg         message to encrypt
+ * @param[in]   msglen      length in bytes of the message
+ * @param[in]   aad         additional authenticated data to protect
+ * @param[in]   aadlen      length of the additional authenticated data
+ * @param[in]   key         key to encrypt with, must be
+ *                          CHACHA20POLY1305_KEY_BYTES long
+ * @param[in]   nonce       Nonce to use. Must be XCHACHA20POLY1305_NONCE_BYTES
+ *                          long
+ */
+void xchacha20poly1305_encrypt(uint8_t *cipher, const uint8_t *msg,
+                               size_t msglen, const uint8_t *aad, size_t aadlen,
+                               const uint8_t *key, const uint8_t *nonce);
+
+/**
+ * @brief Verify the tag and decrypt a ciphertext to plaintext with XChaCha20Poly1305.
+ *
+ * It is allowed to have cipher == msg
+ *
+ * @param[in]   cipher      resulting ciphertext, is CHACHA20POLY1305_TAG_BYTES
+ *                          longer than the message length
+ * @param[in]   cipherlen   length of the ciphertext
+ * @param[out]  msg         message to encrypt
+ * @param[in]   msglen      resulting length in bytes of the message
+ * @param[in]   aad         additional authenticated data to verify
+ * @param[in]   aadlen      length of the additional authenticated data
+ * @param[in]   key         key to decrypt with, must be
+ *                          CHACHA20POLY1305_KEY_BYTES long
+ * @param[in]   nonce       Nonce to use. Must be XCHACHA20POLY1305_NONCE_BYTES
+ *                          long
+ */
+int xchacha20poly1305_decrypt(const uint8_t *cipher, size_t cipherlen,
+                              uint8_t *msg, size_t *msglen, const uint8_t *aad,
+                              size_t aadlen, const uint8_t *key,
+                              const uint8_t *nonce);
 #ifdef __cplusplus
 }
 #endif
