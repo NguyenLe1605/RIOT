@@ -1,0 +1,2 @@
+# Specify the mandatory networking modules
+USEMODULE += gnrc_wireguard

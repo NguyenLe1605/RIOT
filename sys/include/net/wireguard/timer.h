@@ -1,0 +1,7 @@
+#define REKEY_AFTER_MESSAGES (1ULL << 60)
+#define REJECT_AFTER_MESSAGES ((0xffffffffffffffffULL) - (1ULL << 13))
+#define REKEY_AFTER_TIME (120)
+#define REJECT_AFTER_TIME (180)
+#define REKEY_ATTEMPT_TIME (90)
+#define REKEY_TIMEOUT (5)
+#define KEEPALIVE_TIMEOUT (10)

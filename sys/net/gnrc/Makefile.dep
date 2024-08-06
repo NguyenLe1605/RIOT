@@ -511,3 +511,24 @@ ifneq (,$(filter gnrc_lwmac,$(USEMODULE)))
   USEMODULE += xtimer
   FEATURES_REQUIRED += periph_rtt
 endif
+
+ifneq (,$(filter gnrc_wireguard,$(USEMODULE)))
+  USEPKG += libb2
+	USEPKG += c25519
+  USEMODULE += gnrc_netif
+  USEMODULE += sock_async_event
+  USEMODULE += sock_aux_local
+	USEMODULE += sock_udp
+	USEMODULE += sock_util
+	USEMODULE += random
+	USEMODULE += event_callback
+	USEMODULE += event_periodic
+	USEMODULE += gnrc_sock_async
+	USEMODULE += ztimer_msec
+	# Include packages that pull up and auto-init the link layer.
+	# NOTE: 6LoWPAN will be included if IEEE802.15.4 devices are present
+	USEMODULE += netdev_default
+	USEMODULE += gnrc_ipv6
+	USEMODULE += crypto
+	USEMODULE += prng_sha256prng
+endif
