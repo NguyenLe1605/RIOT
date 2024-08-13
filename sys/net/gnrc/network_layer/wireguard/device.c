@@ -1,8 +1,22 @@
 #include "net/wireguard/device.h"
+#include "base64.h"
 #include "blake2.h"
+#include "container.h"
 #include "crypto/helper.h"
+#include "iolist.h"
+#include "net/af.h"
+#include "net/gnrc/netif/hdr.h"
+#include "net/gnrc/nettype.h"
+#include "net/gnrc/pkt.h"
+#include "net/gnrc/pktbuf.h"
 #include "net/ipv6/addr.h"
+#include "net/netdev.h"
+#include "net/netopt.h"
+#include "net/sock.h"
+#include "net/sock/async.h"
 #include "net/sock/async/types.h"
+#include "net/sock/udp.h"
+#include "net/wireguard.h"
 #include "net/wireguard/crypto.h"
 #include "net/wireguard/messages.h"
 #include "net/wireguard/noise.h"
@@ -10,12 +24,180 @@
 #include "random.h"
 #include "ztimer.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+
+#define ENABLE_DEBUG 1
+#include "debug.h"
 
 #define REPLAY_WINDOW_SIZE (32)
 // For HMAC calculation
 #define WG_BLAKE2S_BLOCK_SIZE (64)
 #define COOKIE_NONCE_LEN (24)
+
+static const netdev_driver_t wireguard_driver;
+
+static void wireguard_cleanup(wireguard_t *wg) {
+  crypto_secure_wipe(wg->static_identity.static_public, NOISE_PUBLIC_KEY_LEN);
+  crypto_secure_wipe(wg->static_identity.static_private, NOISE_PRIVATE_KEY_LEN);
+  wg->static_identity.has_identity = false;
+}
+
+static void _receive(sock_udp_t *sock, sock_async_flags_t type, void *arg) {
+  if (!(type & SOCK_ASYNC_MSG_RECV)) {
+    return;
+  }
+  void *stackbuf;
+  void *buf_ctx = NULL;
+  sock_udp_ep_t remote;
+  wireguard_t *wg = (wireguard_t *)arg;
+  (void)wg;
+  ssize_t res = sock_udp_recv_buf(sock, &stackbuf, &buf_ctx, 0, &remote);
+  if (res < 0) {
+    printf("wireguard: udp recv failure: %" PRIdSIZE "\n", res);
+    return;
+  }
+
+  /* TODO: implement decrypt the packet */
+
+  /* allocate netif header */
+  gnrc_pktsnip_t *if_snip = gnrc_netif_hdr_build(NULL, 0, NULL, 0);
+  if (if_snip == NULL) {
+    return;
+  }
+
+  /* add device PID to the netif header */
+  gnrc_netif_hdr_set_netif(if_snip->data, wg->netif);
+  /* allocate payload */
+  gnrc_pktsnip_t *payload =
+      gnrc_pktbuf_add(if_snip, NULL, res, GNRC_NETTYPE_IPV6);
+
+  if (payload == NULL) {
+    gnrc_pktbuf_release(if_snip);
+    return;
+  }
+
+  memcpy(payload->data, stackbuf, res);
+  /* finally dispatch the receive packet to GNRC */
+  if (!gnrc_netapi_dispatch_receive(payload->type, GNRC_NETREG_DEMUX_CTX_ALL,
+                                    payload)) {
+    gnrc_pktbuf_release(payload);
+  }
+
+  printf("recv len: %d\n", res);
+  for (int i = 0; i < res; i++) {
+    printf("%d, ", ((uint8_t *)stackbuf)[i]);
+  }
+  printf("\n");
+  return;
+}
+
+static int _get(netdev_t *dev, netopt_t opt, void *value, size_t max_len) {
+  (void)dev;
+  int result = -ENOTSUP;
+  switch (opt) {
+  case NETOPT_MAX_PDU_SIZE:
+    assert(max_len >= sizeof(uint16_t));
+    *((uint16_t *)value) = WG_MTU;
+    result = sizeof(uint16_t);
+    break;
+  case NETOPT_DEVICE_TYPE:
+    assert(max_len == sizeof(uint16_t));
+    *((uint16_t *)value) = NETDEV_TYPE_WIREGUARD;
+    result = sizeof(uint16_t);
+    break;
+  case NETOPT_PROTO:
+    assert(max_len == sizeof(gnrc_nettype_t));
+    *((gnrc_nettype_t *)value) = GNRC_NETTYPE_IPV6;
+    result = sizeof(gnrc_nettype_t);
+    break;
+  default:
+    break;
+  }
+  return result;
+}
+
+static int _send(netdev_t *dev, const iolist_t *pkt) {
+  (void)pkt;
+  DEBUG("hello\n");
+  wireguard_t *wg = container_of(dev, wireguard_t, netdev);
+  /* TODO: remove this with actual routing to peer */
+  sock_udp_ep_t remote = {
+      .port = 12345,
+      .family = AF_INET6,
+      .addr.ipv6 = {0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x84, 0x2b, 0x16,
+                    0xff, 0xfe, 0x72, 0xa8, 0x40},
+  };
+  if (sock_udp_send(&wg->udp, pkt->iol_base, pkt->iol_len, &remote) < 0) {
+    puts("Error sending message");
+    return -1;
+  }
+  return 0;
+}
+
+int _set(netdev_t *dev, netopt_t opt, const void *value, size_t len) {
+  (void)dev;
+  (void)opt;
+  (void)value;
+  (void)len;
+  /* TODO: add option to set encryption key and ipv6 address */
+  return -ENOTSUP;
+}
+
+/* a gnrc_netif_default_init must be called before */
+static int _init(netdev_t *dev) {
+  assert(dev);
+  wireguard_t *wg;
+  sock_udp_ep_t local_ep;
+  int result;
+
+  result = 0;
+  wg = container_of(dev, wireguard_t, netdev);
+  if (!wg->static_identity.has_identity) {
+    /* the private key during set up is not valid */
+    wireguard_cleanup(wg);
+    return -EINVAL;
+  }
+
+  wg_noise_init();
+
+  /* initalize the udp port, with the preconfigured bind-netif */
+  local_ep = (sock_udp_ep_t)SOCK_IPV6_EP_ANY;
+  local_ep.port = wg->listen_port;
+  local_ep.netif = wg->bind_netif ? wg->bind_netif : SOCK_ADDR_ANY_NETIF;
+
+  if ((result = sock_udp_create(&wg->udp, &local_ep, NULL, 0)) < 0) {
+    wireguard_cleanup(wg);
+    return result;
+  }
+
+  /* set callback to handle receiving UDP packet */
+  sock_udp_set_cb(&wg->udp, _receive, (void *)wg);
+  wg->netif = (gnrc_netif_t *)dev->context;
+  /* set the link to be up */
+  dev->event_callback(dev, NETDEV_EVENT_LINK_UP);
+
+  return result;
+}
+
+void wireguard_setup(wireguard_t *dev, wireguard_params_t *param) {
+  assert(param);
+  DEBUG("testing\n");
+  netdev_t *netdev = &dev->netdev;
+  wg_noise_set_static_identity_private_key(&dev->static_identity,
+                                           param->privkey);
+  dev->listen_port = param->listen_port;
+  dev->bind_netif = param->bind_netif;
+  netdev->driver = &wireguard_driver;
+  netdev_register(netdev, NETDEV_WIREGUARD, 0);
+}
+
+static const netdev_driver_t wireguard_driver = {
+    .init = _init,
+    .get = _get,
+    .send = _send,
+    .set = _set,
+};
 
 // TODO: refactor it to peer.h
 
@@ -33,7 +215,8 @@
 //   return result;
 // }
 //
-// wg_peer_t *peer_lookup_by_pubkey(wg_device_t *device, const uint8_t *pubkey)
+// wg_peer_t *peer_lookup_by_pubkey(wg_device_t *device, const uint8_t
+// *pubkey)
 // {
 //   int i;
 //   wg_peer_t *result = NULL;
@@ -48,7 +231,8 @@
 //   return result;
 // }
 //
-// // TODO: considering remove it later for better peer acknowledge its position
+// // TODO: considering remove it later for better peer acknowledge its
+// position
 // // inside the container
 // uint8_t lookup_index_for_peer(wg_device_t *device, wg_peer_t *peer) {
 //   uint8_t result = 0xFF;
@@ -70,7 +254,8 @@
 //   return result;
 // }
 //
-// wg_peer_t *peer_lookup_by_receiver(wg_device_t *device, uint32_t receiver) {
+// wg_peer_t *peer_lookup_by_receiver(wg_device_t *device, uint32_t receiver)
+// {
 //   wg_peer_t *result = NULL;
 //   wg_peer_t *tmp;
 //   int x;
@@ -92,7 +277,8 @@
 //   return result;
 // }
 //
-// wg_peer_t *peer_lookup_by_handshake(wg_device_t *device, uint32_t receiver) {
+// wg_peer_t *peer_lookup_by_handshake(wg_device_t *device, uint32_t receiver)
+// {
 //   wg_peer_t *result = NULL;
 //   wg_peer_t *tmp;
 //   int x;
@@ -120,8 +306,8 @@
 //   // https://datatracker.ietf.org/doc/html/rfc2401
 //   uint32_t diff;
 //
-//   // wireguard packet start from 0, but the algorithm requires to start from
-//   1 seq++; if (seq == 0) // first == 0 or wrapped
+//   // wireguard packet start from 0, but the algorithm requires to start
+//   from 1 seq++; if (seq == 0) // first == 0 or wrapped
 //     return false;
 //
 //   if (seq > keypair->replay_counter) {

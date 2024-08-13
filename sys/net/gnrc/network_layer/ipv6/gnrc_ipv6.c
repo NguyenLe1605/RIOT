@@ -497,6 +497,14 @@ static void _send_unicast(gnrc_pktsnip_t *pkt, bool prep_hdr,
     gnrc_ipv6_nib_nc_t nce;
 
     DEBUG("ipv6: send unicast\n");
+#ifdef MODULE_GNRC_WIREGUARD
+    DEBUG("ipv6: send to wireguard interface\n");
+    if (netif && netif->device_type == NETDEV_TYPE_WIREGUARD) {
+        memset(nce.l2addr, 0, sizeof(nce.l2addr));
+        nce.l2addr_len = 0;
+        goto ipv6send;
+    }
+#endif
     if (gnrc_ipv6_nib_get_next_hop_l2addr(&ipv6_hdr->dst, netif, pkt,
                                           &nce) < 0) {
         /* packet is released by NIB */
@@ -505,6 +513,9 @@ static void _send_unicast(gnrc_pktsnip_t *pkt, bool prep_hdr,
         return;
     }
     netif = gnrc_netif_get_by_pid(gnrc_ipv6_nib_nc_get_iface(&nce));
+#ifdef MODULE_GNRC_WIREGUARD
+ipv6send:
+#endif
     assert(netif != NULL);
     if (_safe_fill_ipv6_hdr(netif, pkt, prep_hdr)) {
         DEBUG("ipv6: add interface header to packet\n");

@@ -1,8 +1,14 @@
 #include "net/wireguard.h"
 #include "assert.h"
 #include "base64.h"
+#include "container.h"
+#include "iolist.h"
 #include "net/gnrc/netif.h"
 #include "net/gnrc/netif/conf.h"
+#include "net/gnrc/netif/flags.h"
+#include "net/gnrc/netif/internal.h"
+#include "net/gnrc/netif/ipv6.h"
+#include "net/gnrc/nettype.h"
 #include "net/gnrc/pkt.h"
 #include "net/ipv6/addr.h"
 #include "net/netdev.h"
@@ -19,12 +25,158 @@
 #include "ztimer.h"
 #include "ztimer/periodic.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
 #define WG_TIMER_MSECS 400
+
+static char _wg_netif_stack[THREAD_STACKSIZE_DEFAULT];
+static gnrc_netif_t _wg_netif;
+/* Dummy device driver to configure the actual wireguard device */
+static wireguard_t _wg_dev;
+
+static int _netif_init(gnrc_netif_t *netif) {
+  int res = gnrc_netif_default_init(netif);
+  DEBUG("wtf\n");
+  if (res < 0) {
+    return res;
+  }
+#if IS_USED(MODULE_GNRC_NETIF_6LO)
+  /* we disable fragmentation for this device, as the public network interface
+   * will handle it of this */
+  netif.sixlo.max_frag_size = 0;
+#endif /* IS_USED(MODULE_GNRC_NETIF_6LO) */
+  netif->flags = 0;
+  netif->l2addr_len = 0;
+  /* TODO: set up for get and set retval to be all 0 */
+  /* TODO: set up option to set the encryption key */
+
+  netif->ipv6.mtu = WG_MTU;
+  /* TODO: add ipv6 genericly later */
+  ipv6_addr_t addr =
+      (ipv6_addr_t){{32, 1, 13, 184, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}};
+  gnrc_netif_ipv6_addr_add_internal(netif, &addr, 32,
+                                    GNRC_NETIF_IPV6_ADDRS_FLAGS_STATE_VALID);
+
+  res = 0;
+
+  return res;
+}
+
+static int _netif_send(gnrc_netif_t *netif, gnrc_pktsnip_t *pkt) {
+  int res = 0;
+  if (pkt == NULL) {
+    DEBUG("_send_wireguard: pkt was NULL\n");
+    return -EINVAL;
+  }
+  if (pkt->type != GNRC_NETTYPE_NETIF) {
+    DEBUG("_send_wireguard: first header is not generic netif header\n");
+    return -EBADMSG;
+  }
+
+  if (pkt->next == NULL || pkt->next->type != GNRC_NETTYPE_IPV6) {
+    DEBUG("_send_wireguard: second header is not ipv6 header\n");
+    return -EBADMSG;
+  }
+
+  /* write protect `pkt` to set `pkt->next` */
+  gnrc_pktsnip_t *tmp = gnrc_pktbuf_start_write(pkt);
+  if (!tmp) {
+    DEBUG("_send_wireguard: no write access to pkt");
+    gnrc_pktbuf_release(pkt);
+    return -ENOMEM;
+  }
+  pkt = tmp;
+  tmp = gnrc_pktbuf_start_write(pkt->next);
+  if (!tmp) {
+    DEBUG("_send_wireguard: no write access to pkt->next");
+    gnrc_pktbuf_release(pkt);
+    return -ENOMEM;
+  }
+  pkt->next = tmp;
+  /* merge snippets to store the ipv6 packet uniformly in one buffer */
+  res = gnrc_pktbuf_merge(pkt->next);
+  if (res < 0) {
+    DEBUG("_send_wireguard: failed to merge pktbuf\n");
+    gnrc_pktbuf_release(pkt);
+    return res;
+  }
+  iolist_t packet = {.iol_next = NULL,
+                     .iol_base = pkt->next->data,
+                     .iol_len = pkt->next->size};
+  netif->dev->driver->send(netif->dev, &packet);
+  if (gnrc_netif_netdev_legacy_api(netif)) {
+    /* only for legacy drivers we need to release pkt here */
+    gnrc_pktbuf_release(pkt);
+  }
+  return res;
+}
+static gnrc_pktsnip_t *_netif_recv(gnrc_netif_t *netif) {
+  (void)netif;
+  return NULL;
+}
+
+static const gnrc_netif_ops_t _wg_ops = {
+    .init = _netif_init,
+    .send = _netif_send,
+    .recv = _netif_recv,
+    .get = gnrc_netif_get_from_netdev,
+    .set = gnrc_netif_set_from_netdev,
+    .msg_handler = NULL,
+};
+
+/* spawn the netif thread that handle wireguard connection and configure only 1
+ * peer to the wireguard interface, and set up the network device also
+ * TODO: Think of how to handle more than 1 peer later.
+ *TODO: add singleton
+ * */
+gnrc_netif_t *gnrc_netif_wireguard_create(wireguard_params_t *param) {
+  int res;
+  wireguard_setup(&_wg_dev, param);
+  res =
+      gnrc_netif_create(&_wg_netif, _wg_netif_stack, sizeof(_wg_netif_stack),
+                        GNRC_NETIF_PRIO, "wg_netif", &_wg_dev.netdev, &_wg_ops);
+  // TODO: add better error handling later
+  if (res < 0) {
+    return NULL;
+  }
+  return &_wg_netif;
+}
+
+// static int wg_init(gnrc_netif_t *netif) {
+//   netdev_t *dev;
+//   wireguard_t *wg_dev;
+//   // uint8_t privkey[NOISE_PRIVATE_KEY_LEN];
+//   // size_t privkey_len = sizeof(privkey);
+//   // size_t inlen;
+//
+//   dev = netif->dev;
+//   assert(netif != NULL);
+//   assert(dev != NULL);
+//
+//   // TODO: should we reinit if it fails???
+//   if (!netif || !dev) {
+//     return -EINVAL;
+//   }
+//   wg_dev = container_of(dev, wireguard_t, dev);
+//   if (netdev_wireguard_init(wg_dev) < 0) {
+//     // TODO: figure the right retval
+//     return -1;
+//   }
+//   // replace context with the wireguard device
+//
+//   // inlen = strlen(conf->privkey);
+//   // if (base64_decode(conf->privkey, inlen, privkey, &privkey_len) !=
+//   //         BASE64_SUCCESS ||
+//   //     privkey_len != NOISE_PRIVATE_KEY_LEN) {
+//   //   return -EINVAL;
+//   // }
+//
+//   return 0;
+// }
 
 // static int wg_send(gnrc_netif_t *netif, gnrc_pktsnip_t *pkt);
 // static void wg_receive(sock_udp_t *sock, sock_async_flags_t flags, void

@@ -37,14 +37,19 @@ enum cookie_values {
 /* Timer/limits */
 #define REKEY_AFTER_MESSAGES (1ULL << 60)
 #define REJECT_AFTER_MESSAGES (0xFFFFFFFFFFFFFFFFULL - (1ULL << 13))
-#define REKEY_AFTER_TIME (120)
-#define REJECT_AFTER_TIME (180)
-#define REKEY_TIMEOUT (5)
-#define KEEPALIVE_TIMEOUT (10)
-/* Peers are allocated statically inside the device structure to avoid malloc */
-#define MAX_PEERS_PER_DEVICE (1)
-/* Maximum number of handshake initiation per second */
-#define INITIATIONS_PER_SECOND (2)
+
+enum limits {
+  REKEY_AFTER_TIME = 120,
+  REJECT_AFTER_TIME = 180,
+  REKEY_TIMEOUT = 5,
+  KEEPALIVE_TIMEOUT = 10,
+  /* Peers are allocated statically inside the device structure to avoid malloc
+   */
+  MAX_PEERS_PER_DEVICE = 1,
+  /* Maximum number of handshake initiation per second */
+  INITIATIONS_PER_SECOND = 2,
+  MAX_TIMER_HANDSHAKES = 90 / REKEY_TIMEOUT,
+};
 
 enum message_type {
   MESSAGE_INVALID = 0,

@@ -5,6 +5,7 @@
 
 #include "net/gnrc/netif.h"
 #include "net/ipv6/addr.h"
+#include "net/sock/udp.h"
 #include "wireguard/crypto.h"
 #include "wireguard/device.h"
 #include "wireguard/messages.h"
@@ -17,16 +18,6 @@
 #define WG_DEFAULT_PORT (51820)
 #define WG_KEEPALIVE_DEFAULT (0xFFFF)
 #define WG_INVALID_INDEX (0xFF)
-
-typedef struct wg_config {
-  // Required: the private key of this WireGuard network interface
-  const char *privkey;
-  // Required: What UDP port to listen on
-  uint16_t listen_port;
-  // Optional: restrict send/receive of encapsulated WireGuard traffic to this
-  // network interface only (NULL to use routing table)
-  gnrc_netif_t *bind_netif;
-} wg_config_t;
 
 // This struct represents a peer residing on the wireguard netif
 typedef struct wg_ifpeer {
@@ -43,10 +34,24 @@ typedef struct wg_ifpeer {
   // uint16_t prefix_length;
 
   // End-point details (may be blank)
-  struct endpoint ep;
+  sock_udp_ep_t *remote;
 
   uint16_t keep_alive;
 } wg_ifpeer_t;
+
+typedef struct wg_config {
+  // Required: the private key of this WireGuard network interface
+  const char *privkey;
+  // Required: What UDP port to listen on
+  uint16_t listen_port;
+  // Optional: restrict send/receive of encapsulated WireGuard traffic to this
+  // network interface only (NULL to use routing table)
+  gnrc_netif_t *bind_netif;
+  // the configuration of the netif contains the peer also
+  wg_ifpeer_t *ifpeer;
+} wg_config_t;
+
+gnrc_netif_t *gnrc_netif_wireguard_create(wireguard_params_t *param);
 
 // // TODO: Hardcoded setup to get running for now, change later
 // void wg_setup(void);

@@ -27,6 +27,7 @@
 #include "net/gnrc.h"
 #include "net/gnrc/ipv6/nib.h"
 #include "net/gnrc/ipv6.h"
+#include "net/netdev.h"
 #if IS_USED(MODULE_GNRC_NETIF_PKTQ)
 #include "net/gnrc/netif/pktq.h"
 #endif /* IS_USED(MODULE_GNRC_NETIF_PKTQ) */
@@ -1606,6 +1607,8 @@ static void _test_options(gnrc_netif_t *netif)
             assert(0U == netif->l2addr_len);
             /* don't check MTU here for now since I'm not sure the current
              * one is correct ^^" "*/
+            break;
+        case NETDEV_TYPE_WIREGUARD:
             break;
         default:
             /* device type not supported yet, please amend case above when

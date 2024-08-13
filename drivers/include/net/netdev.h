@@ -225,6 +225,7 @@ enum {
     NETDEV_TYPE_NRF24L01P_NG,
     NETDEV_TYPE_SLIP,
     NETDEV_TYPE_ESP_NOW,
+    NETDEV_TYPE_WIREGUARD,
 };
 /** @} */
 
@@ -334,6 +335,7 @@ typedef enum {
     NETDEV_CDC_ECM,
     NETDEV_TINYUSB,
     NETDEV_W5500,
+    NETDEV_WIREGUARD,
     /* add more if needed */
 } netdev_type_t;
 /** @} */
