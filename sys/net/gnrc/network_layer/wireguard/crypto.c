@@ -30,31 +30,18 @@ void dh_generate_private_key(uint8_t *key) {
   dh_clamp_private_key(key);
 }
 
-void mac_key(uint8_t *key, const uint8_t *pubkey, const uint8_t *label,
-             size_t label_len) {
-  blake2s_state s;
-  blake2s_init(&s, NOISE_SYMMETRIC_KEY_LEN);
-  blake2s_update(&s, label, label_len);
-  blake2s_update(&s, pubkey, NOISE_PUBLIC_KEY_LEN);
-  blake2s_final(&s, key, NOISE_SYMMETRIC_KEY_LEN);
-}
-
-void mac(uint8_t *dst, const void *message, size_t inlen, const uint8_t *key,
-         size_t keylen) {
-  blake2s(dst, message, key, NOISE_HASH_LEN, inlen, keylen);
-}
-
 void hmac(uint8_t *result, const uint8_t *key, size_t key_len,
           const uint8_t *msg, size_t msglen) {
-  // Adapted from appendix example in RFC2104 to use BLAKE2S instead of MD5 -
-  // https://tools.ietf.org/html/rfc2104
+  /* Adapted from appendix example in RFC2104 to use BLAKE2S instead of MD5 -
+   https://tools.ietf.org/html/rfc2104 */
   blake2s_state ctx;
-  uint8_t k_ipad[BLAKE2S_BLOCKBYTES]; // inner padding - key XORd with ipad
-  uint8_t k_opad[BLAKE2S_BLOCKBYTES]; // outer padding - key XORd with opad
+  uint8_t k_ipad[BLAKE2S_BLOCKBYTES]; /* inner padding - key XORd with ipad */
+  uint8_t k_opad[BLAKE2S_BLOCKBYTES]; /* outer padding - key XORd with opad */
 
   uint8_t tk[NOISE_HASH_LEN];
   int i;
-  // if key is longer than BLAKE2S_BLOCK_SIZE bytes reset it to key=BLAKE2S(key)
+  /* if key is longer than BLAKE2S_BLOCK_SIZE bytes reset it to key=BLAKE2S(key)
+   */
   if (key_len > BLAKE2S_BLOCKBYTES) {
     blake2s_state tctx;
     blake2s_init(&tctx, NOISE_HASH_LEN);
@@ -64,35 +51,34 @@ void hmac(uint8_t *result, const uint8_t *key, size_t key_len,
     key_len = NOISE_HASH_LEN;
   }
 
-  // the HMAC transform looks like:
-  // HASH(K XOR opad, HASH(K XOR ipad, text))
-  // where K is an n byte key
-  // ipad is the byte 0x36 repeated BLAKE2S_BLOCK_SIZE times
-  // opad is the byte 0x5c repeated BLAKE2S_BLOCK_SIZE times
-  // and text is the data being protected
+  /* the HMAC transform looks like:
+   * HASH(K XOR opad, HASH(K XOR ipad, text))
+   * where K is an n byte key
+   * ipad is the byte 0x36 repeated BLAKE2S_BLOCK_SIZE times
+   * opad is the byte 0x5c repeated BLAKE2S_BLOCK_SIZE times
+   * and text is the data being protected
+   * */
   memset(k_ipad, 0, sizeof(k_ipad));
   memset(k_opad, 0, sizeof(k_opad));
   memcpy(k_ipad, key, key_len);
   memcpy(k_opad, key, key_len);
 
-  // XOR key with ipad and opad values
+  /* XOR key with ipad and opad values */
   for (i = 0; i < BLAKE2S_BLOCKBYTES; i++) {
     k_ipad[i] ^= 0x36;
     k_opad[i] ^= 0x5c;
   }
-  // perform inner HASH
-  blake2s_init(&ctx, NOISE_HASH_LEN); // init context for 1st pass
-  blake2s_update(&ctx, k_ipad,
-                 BLAKE2S_BLOCKBYTES);          // start with inner pad
-  blake2s_update(&ctx, msg, msglen);           // then text of datagram
-  blake2s_final(&ctx, result, NOISE_HASH_LEN); // finish up 1st pass
+  /* perform inner HASH */
+  blake2s_init(&ctx, NOISE_HASH_LEN); /* init context for 1st pass */
+  blake2s_update(&ctx, k_ipad, BLAKE2S_BLOCKBYTES); /* start with inner pad */
+  blake2s_update(&ctx, msg, msglen);                /* then text of datagram */
+  blake2s_final(&ctx, result, NOISE_HASH_LEN);      /* finish up 1st pass */
 
-  // perform outer HASH
-  blake2s_init(&ctx, NOISE_HASH_LEN); // init context for 2nd pass
-  blake2s_update(&ctx, k_opad,
-                 BLAKE2S_BLOCKBYTES);           // start with outer pad
-  blake2s_update(&ctx, result, NOISE_HASH_LEN); // then results of 1st hash
-  blake2s_final(&ctx, result, NOISE_HASH_LEN);  // finish up 2nd pass
+  /* perform outer HASH */
+  blake2s_init(&ctx, NOISE_HASH_LEN); /* init context for 2nd pass */
+  blake2s_update(&ctx, k_opad, BLAKE2S_BLOCKBYTES); /* start with outer pad */
+  blake2s_update(&ctx, result, NOISE_HASH_LEN); /* then results of 1st hash */
+  blake2s_final(&ctx, result, NOISE_HASH_LEN);  /* finish up 2nd pass */
 }
 
 void kdf(uint8_t *first_dst, uint8_t *second_dst, uint8_t *third_dst,

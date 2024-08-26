@@ -25,6 +25,7 @@ USEMODULE += base64
 USEMODULE += shell
 USEMODULE += shell_cmds_default
 USEMODULE += ps
+USEMODULE += tiny_strerror
 
 # Comment this out to disable code in RIOT that does safety checking
 # which is not needed in a production environment but helps in the

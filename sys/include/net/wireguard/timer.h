@@ -1,6 +1,8 @@
 #include "time_units.h"
 #include "ztimer.h"
 
+#define TIMER_INTERVAL_MSEC (400)
+
 struct wg_peer;
 
 void wg_timers_init(struct wg_peer *peer);
@@ -14,8 +16,10 @@ void wg_timers_handshake_complete(struct wg_peer *peer);
 void wg_timers_session_derived(struct wg_peer *peer);
 void wg_timers_any_authenticated_packet_traversal(struct wg_peer *peer);
 
-static inline bool wg_birthdate_has_expired(uint64_t birthday_microseconds,
-                                            uint64_t expiration_seconds) {
-  return (int64_t)(birthday_microseconds + expiration_seconds * US_PER_SEC) <=
-         (int64_t)ztimer_now(ZTIMER_USEC);
+static inline bool wg_birthdate_has_expired(uint32_t birthday_milliseconds,
+                                            uint32_t expiration_seconds) {
+  return (ztimer_now(ZTIMER_MSEC) - birthday_milliseconds) >=
+         expiration_seconds * MS_PER_SEC;
 }
+
+void wireguard_timer(void *arg);

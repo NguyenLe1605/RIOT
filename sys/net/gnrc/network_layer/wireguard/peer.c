@@ -1,11 +1,15 @@
 #include "net/wireguard/peer.h"
 #include "crypto/helper.h"
+#include "net/ipv6/addr.h"
+#include "net/wireguard/cookie.h"
+#include "net/wireguard/device.h"
 #include "net/wireguard/messages.h"
+#include "net/wireguard/noise.h"
 #include "random.h"
 
 struct wg_peer *
-wg_lookup_peer_by_pubkey(struct wg_peer peers[MAX_PEERS_PER_DEVICE],
-                         const uint8_t pubkey[NOISE_PUBLIC_KEY_LEN]) {
+peer_lookup_by_pubkey(struct wg_peer peers[MAX_PEERS_PER_DEVICE],
+                      const uint8_t pubkey[NOISE_PUBLIC_KEY_LEN]) {
   struct wg_peer *ret_peer = NULL;
   struct wg_peer *peer;
   int i = 0;
@@ -23,6 +27,126 @@ wg_lookup_peer_by_pubkey(struct wg_peer peers[MAX_PEERS_PER_DEVICE],
   return ret_peer;
 }
 
+struct wg_peer *peer_lookup_by_index(struct wg_peer peers[MAX_PEERS_PER_DEVICE],
+                                     uint8_t index) {
+  struct wg_peer *result = NULL;
+  if (index < MAX_PEERS_PER_DEVICE && peers[index].valid) {
+    result = &peers[index];
+  }
+  return result;
+}
+
+struct wg_peer *
+peer_lookup_by_allowed_ip(struct wg_peer peers[MAX_PEERS_PER_DEVICE],
+                          const ipv6_addr_t *addr) {
+  struct wg_peer *peer = NULL;
+  struct wg_peer *tmp;
+  struct wg_allowed_ip *allowed;
+  uint8_t best_match = 0;
+  uint8_t match;
+  size_t i;
+  size_t j;
+
+  for (i = 0; i < MAX_PEERS_PER_DEVICE; ++i) {
+    tmp = &peers[i];
+    if (!tmp->valid) {
+      continue;
+    }
+    /* perform longest prefix match to find the dest ip */
+    for (j = 0; j < MAX_SRC_IPS; ++j) {
+      allowed = &tmp->allowed_source_ips[i];
+      if (!allowed->valid)
+        continue;
+      match = ipv6_addr_match_prefix(&allowed->ip, addr);
+      if (match < allowed->pfx_len)
+        continue;
+      /* the 0 case is when the destination allowed ip is an unspecified IPv6
+       * address */
+      if (match > best_match || best_match == 0) {
+        peer = tmp;
+        best_match = match;
+      }
+      /* found the exact match on the ipv6 address destination */
+      if (best_match == IPV6_ADDR_BIT_LEN) {
+        return peer;
+      }
+    }
+  }
+  return peer;
+}
+
+struct wg_peer *peer_alloc(struct wg_peer peers[MAX_PEERS_PER_DEVICE]) {
+  uint8_t i;
+  struct wg_peer *peer = NULL;
+  for (i = 0; i < MAX_PEERS_PER_DEVICE; ++i) {
+    peer = &peers[i];
+    if (!peer->valid) {
+      peer->peer_idx = i;
+      break;
+    }
+  }
+  return peer;
+}
+
+void peer_remove(struct wg_peer *peer) {
+  wg_noise_handshake_clear(&peer->handshake);
+  wg_noise_keypairs_clear(&peer->keypairs);
+  crypto_secure_wipe(peer, sizeof(struct wg_peer));
+  peer->valid = false;
+}
+
+bool wireguard_peer_init(struct wg_device *wg, struct wg_peer *peer,
+                         const uint8_t public_key[NOISE_PUBLIC_KEY_LEN],
+                         const uint8_t preshared_key[NOISE_SYMMETRIC_KEY_LEN]) {
+  assert(wg);
+  assert(peer);
+  /* clean up the peer */
+  memset(peer, 0, sizeof(struct wg_peer));
+  if (!wg->valid) {
+    return false;
+  }
+  peer->device = wg;
+  peer->valid = wg_noise_handshake_init(&peer->handshake, &wg->static_identity,
+                                        public_key, preshared_key, peer);
+  if (peer->valid) {
+    wg_cookie_init(&peer->latest_cookie);
+    wg_cookie_checker_precompute_peer_keys(peer);
+    wg_noise_reset_last_sent_handshake(&peer->last_sent_handshake);
+  }
+  return peer->valid;
+}
+
+bool peer_add_ip(struct wg_peer *peer, ipv6_addr_t *allowed_ip,
+                 unsigned int pfx_len) {
+  bool result = false;
+  struct wg_allowed_ip *allowed;
+  int i;
+
+  /* check for existing match */
+  for (i = 0; i < MAX_SRC_IPS; ++i) {
+    allowed = &peer->allowed_source_ips[i];
+    if (allowed->valid && ipv6_addr_equal(&allowed->ip, allowed_ip) &&
+        allowed->pfx_len == pfx_len) {
+      result = true;
+      break;
+    }
+  }
+
+  if (!result) {
+    for (i = 0; i < MAX_SRC_IPS; ++i) {
+      allowed = &peer->allowed_source_ips[i];
+      if (!allowed->valid) {
+        allowed->valid = true;
+        allowed->ip = *allowed_ip;
+        allowed->pfx_len = pfx_len;
+        result = true;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
 uint32_t wg_generate_unique_index(struct wg_peer peers[MAX_PEERS_PER_DEVICE]) {
   /* generate 32-bit random index that has not been used by any valid handshake
    * or key */
@@ -36,17 +160,16 @@ uint32_t wg_generate_unique_index(struct wg_peer peers[MAX_PEERS_PER_DEVICE]) {
     } while (result == 0 || result == 0xFFFFFFFF);
     for (i = 0; i < MAX_PEERS_PER_DEVICE; ++i) {
       peer = &peers[i];
-      /* For invalid keypair, we will reuse it?? */
       if (peer->valid) {
-        if (peer->keypairs.current_keypair.is_valid) {
+        if (peer->keypairs.current_keypair.valid) {
           existing = existing ||
                      (result == peer->keypairs.current_keypair.local_index);
         }
-        if (peer->keypairs.previous_keypair.is_valid) {
+        if (peer->keypairs.previous_keypair.valid) {
           existing = existing ||
                      (result == peer->keypairs.previous_keypair.local_index);
         }
-        if (peer->keypairs.next_keypair.is_valid) {
+        if (peer->keypairs.next_keypair.valid) {
           existing =
               existing || (result == peer->keypairs.next_keypair.local_index);
         }
@@ -61,8 +184,8 @@ uint32_t wg_generate_unique_index(struct wg_peer peers[MAX_PEERS_PER_DEVICE]) {
 }
 
 struct wg_peer *
-wg_lookup_peer_by_handshake_receiver(struct wg_peer peers[MAX_PEERS_PER_DEVICE],
-                                     uint32_t receiver_index) {
+peer_lookup_by_handshake_receiver(struct wg_peer peers[MAX_PEERS_PER_DEVICE],
+                                  uint32_t receiver_index) {
   struct wg_peer *ret_peer = NULL;
   struct wg_peer *peer;
   int i = 0;
@@ -79,77 +202,3 @@ wg_lookup_peer_by_handshake_receiver(struct wg_peer peers[MAX_PEERS_PER_DEVICE],
   }
   return ret_peer;
 }
-
-// static void add_new_keypair(wg_peer_t *peer, wg_keypair_t new_keypair);
-//
-// void keypair_destroy(wg_keypair_t *keypair) {
-//   crypto_secure_wipe(keypair, sizeof(wg_keypair_t));
-//   keypair->valid = false;
-// }
-//
-// void keypair_update(wg_peer_t *peer, wg_keypair_t *received_keypair) {
-//   bool key_is_next = (received_keypair == &peer->next_keypair);
-//   if (key_is_next) {
-//     peer->prev_keypair = peer->curr_keypair;
-//     peer->curr_keypair = peer->next_keypair;
-//     keypair_destroy(&peer->next_keypair);
-//   }
-// }
-//
-// void wg_start_session(wg_peer_t *peer, bool initiator) {
-//   wg_noise_handshake_t *handshake = &peer->handshake;
-//   wg_keypair_t new_keypair;
-//
-//   crypto_secure_wipe(&new_keypair, sizeof(wg_keypair_t));
-//   new_keypair.initiator = initiator;
-//   new_keypair.local_index = handshake->local_index;
-//   new_keypair.remote_index = handshake->remote_index;
-//
-//   new_keypair.keypair_millis = ztimer_now(ZTIMER_MSEC);
-//   new_keypair.sending_valid = true;
-//   new_keypair.receiving_valid = true;
-//
-//   // 5.4.5 Transport Data Key Derivation
-//   // (Tsendi = Trecvr, Trecvi = Tsendr) := Kdf2(Ci = Cr,E)
-//   if (new_keypair.initiator) {
-//     kdf2(new_keypair.sending_key, new_keypair.receiving_key,
-//          handshake->chaining_key, NULL, 0);
-//   } else {
-//     kdf2(new_keypair.receiving_key, new_keypair.sending_key,
-//          handshake->chaining_key, NULL, 0);
-//   }
-//
-//   new_keypair.replay_bitmap = 0;
-//   new_keypair.replay_counter = 0;
-//
-//   new_keypair.last_tx = 0;
-//   new_keypair.last_rx = 0; // No packets received yet
-//
-//   new_keypair.valid = true;
-//
-//   // Eprivi = Epubi = Eprivr = Epubr = Ci = Cr := E
-//   crypto_secure_wipe(handshake->ephemeral_private, WG_PUBLIC_KEY_LEN);
-//   crypto_secure_wipe(handshake->remote_ephemeral, WG_PUBLIC_KEY_LEN);
-//   crypto_secure_wipe(handshake->hash, WG_HASH_LEN);
-//   crypto_secure_wipe(handshake->chaining_key, WG_HASH_LEN);
-//   handshake->remote_index = 0;
-//   handshake->local_index = 0;
-//   handshake->valid = false;
-//
-//   add_new_keypair(peer, new_keypair);
-// }
-//
-// static void add_new_keypair(wg_peer_t *peer, wg_keypair_t new_keypair) {
-//   if (new_keypair.initiator) {
-//     if (peer->next_keypair.valid) {
-//       peer->prev_keypair = peer->next_keypair;
-//       keypair_destroy(&peer->next_keypair);
-//     } else {
-//       peer->prev_keypair = peer->curr_keypair;
-//     }
-//     peer->curr_keypair = new_keypair;
-//   } else {
-//     peer->next_keypair = new_keypair;
-//     keypair_destroy(&peer->prev_keypair);
-//   }
-// }

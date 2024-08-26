@@ -21,7 +21,8 @@
 
 void wg_cookie_checker_init(struct cookie_checker *checker,
                             struct wg_device *wg) {
-  checker->secret_birthdate = ztimer_now(ZTIMER_USEC);
+  checker->secret_birthdate = ztimer_now(ZTIMER_MSEC);
+  random_bytes(checker->secret, NOISE_HASH_LEN);
   checker->device = wg;
 }
 
@@ -84,7 +85,7 @@ static void make_cookie(uint8_t cookie[COOKIE_LEN], sock_udp_ep_t *remote,
 
   if (wg_birthdate_has_expired(checker->secret_birthdate,
                                COOKIE_SECRET_MAX_AGE)) {
-    checker->secret_birthdate = ztimer_now(ZTIMER_USEC);
+    checker->secret_birthdate = ztimer_now(ZTIMER_MSEC);
     random_bytes(checker->secret, NOISE_HASH_LEN);
   }
 
@@ -124,7 +125,6 @@ enum cookie_mac_state wg_cookie_validate_packet(struct cookie_checker *checker,
     goto out;
   }
 
-  // TODO: think of ratelimit later
   ret = VALID_MAC_WITH_COOKIE;
 
 out:
@@ -152,8 +152,8 @@ void wg_cookie_message_create(struct message_cookie_reply *dst, uint8_t *buf,
   struct message_macs *macs =
       (struct message_macs *)(buf + len - sizeof(*macs));
   uint8_t cookie[COOKIE_LEN];
-  dst->header.type = MESSAGE_HANDSHAKE_COOKIE;
-  dst->receiver_idx = index;
+  dst->header.type = byteorder_htoll(MESSAGE_HANDSHAKE_COOKIE);
+  dst->receiver_idx = byteorder_htoll(index);
   random_bytes(dst->nonce, COOKIE_NONCE_LEN);
   make_cookie(cookie, remote, checker);
   xchacha20poly1305_encrypt(dst->encrypted_cookie, cookie, COOKIE_LEN,
@@ -161,18 +161,20 @@ void wg_cookie_message_create(struct message_cookie_reply *dst, uint8_t *buf,
                             checker->cookie_encryption_key, dst->nonce);
 }
 
-void wg_cookie_message_consume(struct message_cookie_reply *src,
+bool wg_cookie_message_consume(struct message_cookie_reply *src,
                                struct wg_device *wg) {
   struct wg_peer *peer = NULL;
   uint8_t cookie[COOKIE_LEN];
   bool ret;
   size_t s;
-  if ((peer = wg_lookup_peer_by_handshake_receiver(wg->peers,
-                                                   src->receiver_idx)) == NULL)
-    return;
+  uint32_t receiver;
+  receiver = byteorder_ltohl(src->receiver_idx);
+  peer = peer_lookup_by_handshake_receiver(wg->peers, receiver);
+  if (peer == NULL)
+    return false;
 
   if (!peer->latest_cookie.have_sent_mac1)
-    return;
+    return false;
 
   s = sizeof(cookie);
   ret = xchacha20poly1305_decrypt(
@@ -182,10 +184,11 @@ void wg_cookie_message_consume(struct message_cookie_reply *src,
 
   if (ret) {
     memcpy(peer->latest_cookie.cookie, cookie, COOKIE_LEN);
-    peer->latest_cookie.birthdate = ztimer_now(ZTIMER_USEC);
+    peer->latest_cookie.birthdate = ztimer_now(ZTIMER_MSEC);
     peer->latest_cookie.is_valid = true;
     peer->latest_cookie.have_sent_mac1 = false;
   } else {
-    DEBUG("wireguard: Could not decrypt invalid cookie response\n");
+    DEBUG("wireguard_receive: could not decrypt invalid cookie response\n");
   }
+  return ret != 0;
 }

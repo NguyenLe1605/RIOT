@@ -2,12 +2,15 @@
 #define _WIREGUARD_MESSAGES_H_
 
 #include "blake2.h"
+#include "byteorder.h"
 #include "c25519.h"
 #include "crypto/chacha20poly1305.h"
 #include <stddef.h>
 #include <stdint.h>
 
 #define CURVE25519_KEY_SIZE C25519_EXPONENT_SIZE
+
+#define TRANSPORT_DATA_HEADER_LEN (16)
 
 enum noise_lengths {
   NOISE_PUBLIC_KEY_LEN = CURVE25519_KEY_SIZE,
@@ -67,55 +70,55 @@ struct message_header {
    * But it turns out that by encoding this as little endian,
    * we achieve the same thing, and it makes checking faster.
    */
-  uint32_t type;
-};
+  le_uint32_t type;
+} __attribute__((__packed__));
 
 struct message_macs {
   /* the mac of responder's public key, always present and valid */
   uint8_t mac1[COOKIE_LEN];
   /* valid mac for message during under load */
   uint8_t mac2[COOKIE_LEN];
-};
+} __attribute__((__packed__));
 
 // 5.4.2 First Message: Initiator to Responder
 struct message_handshake_initiation {
   struct message_header header;
   /* tie subsequent replies to the session begun by this message */
-  uint32_t sender_index;
+  le_uint32_t sender_index;
   uint8_t unencrypted_ephemeral[NOISE_PUBLIC_KEY_LEN];
   uint8_t encrypted_static[noise_encrypted_len(NOISE_PUBLIC_KEY_LEN)];
   uint8_t encrypted_timestamp[noise_encrypted_len(NOISE_TIMESTAMP_LEN)];
   struct message_macs macs;
-}; /* __attribute__((__packed__))*/
+} __attribute__((__packed__));
 
 // 5.4.3 Second Message: Responder to Initiator
 struct message_handshake_response {
   struct message_header header;
   /* tie subsequent replies to the session begun by this message */
-  uint32_t sender_index;
-  uint32_t receiver_index;
+  le_uint32_t sender_index;
+  le_uint32_t receiver_index;
   uint8_t unencrypted_ephemeral[NOISE_PUBLIC_KEY_LEN];
   uint8_t encrypted_nothing[noise_encrypted_len(0)];
   struct message_macs macs;
 
-} /*__attribute__((__packed__))*/;
+} __attribute__((__packed__));
 
 // 5.4.6 Subsequent Messages: Transport Data Messages
 struct message_transport_data {
   struct message_header header;
-  uint32_t receiver_idx;
-  uint64_t counter;
+  le_uint32_t receiver_idx;
+  le_uint64_t counter;
   uint8_t encrypted_data[];
-} /*__attribute__((__packed__))*/;
+} __attribute__((__packed__));
 
 // 5.4.7 Under Load: Cookie Reply Message
 struct message_cookie_reply {
   struct message_header header;
   /* determined by the initiator msg.sender field */
-  uint32_t receiver_idx;
+  le_uint32_t receiver_idx;
   uint8_t nonce[COOKIE_NONCE_LEN];
   uint8_t encrypted_cookie[noise_encrypted_len(COOKIE_LEN)];
-} /*__attribute__((__packed__))*/;
+} __attribute__((__packed__));
 
 #define message_data_len(plain_len)                                            \
   (noise_encrypted_len(plain_len) + sizeof(struct message_data))

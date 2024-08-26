@@ -9,27 +9,28 @@
 
 struct wg_peer;
 
-struct noise_replay_counter {
-  // sliding window bitmap per rfc 2401 appendix C
-  uint32_t replay_bitmap;
-  uint64_t replay_counter;
+struct noise_replay_window {
+  uint32_t bitmap;
+  uint64_t last_seq;
 };
 
 struct noise_symmetric_key {
   uint8_t key[NOISE_SYMMETRIC_KEY_LEN];
-  uint64_t birthdate;
-  bool is_valid;
+  uint32_t birthdate;
+  bool valid;
 };
 
 struct noise_keypair {
   uint32_t local_index;
   struct noise_symmetric_key sending;
+  /* TODO: change to uint32_t if needed */
   uint64_t sending_counter;
   struct noise_symmetric_key receiving;
-  struct noise_replay_counter receiving_counter;
+  struct noise_replay_window receiving_counter;
   uint32_t remote_index;
-  bool i_am_the_initiator;
-  bool is_valid;
+  uint32_t birthdate;
+  bool initiator;
+  bool valid;
 };
 
 struct noise_keypairs {
@@ -55,11 +56,8 @@ enum noise_handshake_state {
 /* Each handshake's lifetime is tied to a peer */
 struct noise_handshake {
   bool valid; /* valid when the handshake starts */
-  // TODO: use for siphash later?
   uint32_t local_index;
   enum noise_handshake_state state;
-  uint64_t last_initiation_consumption;
-
   struct noise_static_identity *static_identity;
 
   uint8_t ephemeral_private[NOISE_PUBLIC_KEY_LEN];
@@ -73,28 +71,25 @@ struct noise_handshake {
   uint8_t hash[NOISE_HASH_LEN];
   uint8_t chaining_key[NOISE_HASH_LEN];
 
-  uint8_t latest_timestamp[NOISE_TIMESTAMP_LEN];
+  /* 5.1 Silence is a Virtue: The responder keeps track of the greatest
+   * timestamp received per peer */
+  uint8_t greatest_timestamp[NOISE_TIMESTAMP_LEN];
   uint32_t remote_index;
-
-  /* Protects all members except the immutable (after noise_handshake_
-   * init): remote_static, precomputed_static_static, static_identity.
-   */
-  // struct rw_semaphore lock;
 };
 
 struct wg_device;
 
 void wg_noise_init(void);
-void wg_noise_handshake_init(
+bool wg_noise_handshake_init(
     struct noise_handshake *handshake,
     struct noise_static_identity *static_identity,
     const uint8_t peer_public_key[NOISE_PUBLIC_KEY_LEN],
     const uint8_t peer_preshared_key[NOISE_SYMMETRIC_KEY_LEN],
     struct wg_peer *peer);
 void wg_noise_handshake_clear(struct noise_handshake *handshake);
-static inline void wg_noise_reset_last_sent_handshake(uint64_t *handshake_us) {
-  *handshake_us =
-      ztimer_now(ZTIMER_USEC) - (uint64_t)(REKEY_TIMEOUT + 1) * US_PER_SEC;
+static inline void wg_noise_reset_last_sent_handshake(uint32_t *handshake_ms) {
+  *handshake_ms =
+      ztimer_now(ZTIMER_MSEC) - (uint32_t)(REKEY_TIMEOUT + 1) * MS_PER_SEC;
 }
 
 void wg_noise_keypair_put(struct noise_keypair *keypair, bool unreference_now);
@@ -107,7 +102,7 @@ void wg_noise_expire_current_peer_keypairs(struct wg_peer *peer);
 void wg_noise_set_static_identity_private_key(
     struct noise_static_identity *static_identity,
     const uint8_t private_key[NOISE_PUBLIC_KEY_LEN]);
-void wg_noise_precompute_static_static(struct wg_peer *peer);
+bool wg_noise_precompute_static_static(struct wg_peer *peer);
 
 bool wg_noise_handshake_create_initiation(
     struct message_handshake_initiation *dst, struct noise_handshake *handshake,
@@ -125,5 +120,9 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 
 bool wg_noise_handshake_begin_session(struct noise_handshake *handshake,
                                       struct noise_keypairs *keypairs);
+
+void wg_noise_destroy_keypair(struct noise_keypair *keypair);
+void wg_noise_update_keypair(struct noise_keypairs *keypairs,
+                             struct noise_keypair *keypair);
 
 #endif

@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #define WG_BLAKE2S_BLOCK_SIZE (64)
 
@@ -23,28 +22,7 @@ void dh_generate_private_key(uint8_t *key);
 
 bool dh_generate_public_key(uint8_t *pubkey, const uint8_t *privkey);
 
-void mac_key(uint8_t *key, const uint8_t *pubkey, const uint8_t *label,
-             size_t label_len);
-
 static inline void dh_clamp_private_key(uint8_t *key) { c25519_prepare(key); }
-
-static inline void aead_encrypt(uint8_t *cipher, const uint8_t *msg,
-                                size_t msglen, const uint8_t *aad,
-                                size_t aadlen, const uint8_t *key,
-                                const uint8_t *nonce) {
-  chacha20poly1305_encrypt(cipher, msg, msglen, aad, aadlen, key, nonce);
-}
-
-static inline bool aead_decrypt(const uint8_t *cipher, size_t cipherlen,
-                                uint8_t *msg, size_t *msglen,
-                                const uint8_t *aad, size_t aadlen,
-                                const uint8_t *key, const uint8_t *nonce) {
-  return chacha20poly1305_decrypt(cipher, cipherlen, msg, msglen, aad, aadlen,
-                                  key, nonce) == 1;
-}
-
-void mac(uint8_t *dst, const void *message, size_t inlen, const uint8_t *key,
-         size_t keylen);
 
 void hmac(uint8_t *result, const uint8_t *key, size_t key_len,
           const uint8_t *msg, size_t msglen);
