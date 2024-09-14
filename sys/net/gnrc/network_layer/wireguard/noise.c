@@ -488,6 +488,9 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 
   receiver = byteorder_ltohl(src->receiver_index);
   peer = peer_lookup_by_handshake_receiver(wg->peers, receiver);
+  if (!peer)
+    goto out;
+
   handshake = &peer->handshake;
   if (unlikely(!handshake->valid))
     goto out;

@@ -372,6 +372,7 @@ ssize_t sock_udp_sendv_aux(sock_udp_t *sock,
             return -EINVAL;
         }
         else if (gnrc_ep_addr_any((const sock_ip_ep_t *)remote)) {
+            DEBUG("any ep addres\n");
             return -EINVAL;
         }
         else if (gnrc_af_not_supported(remote->family)) {

@@ -2,24 +2,17 @@
 #include "assert.h"
 #include "base64.h"
 #include "container.h"
-#include "crypto/helper.h"
-#include "iolist.h"
 #include "net/gnrc/netif.h"
-#include "net/gnrc/netif/conf.h"
-#include "net/gnrc/netif/flags.h"
-#include "net/gnrc/netif/internal.h"
 #include "net/gnrc/netif/ipv6.h"
 #include "net/gnrc/nettype.h"
 #include "net/gnrc/pkt.h"
 #include "net/ipv6/addr.h"
 #include "net/ipv6/hdr.h"
 #include "net/netdev.h"
-#include "net/netif.h"
 #include "net/sock.h"
 #include "net/sock/async.h"
 #include "net/sock/async/types.h"
 #include "net/sock/udp.h"
-#include "net/wireguard/crypto.h"
 #include "net/wireguard/device.h"
 #include "net/wireguard/messages.h"
 #include "net/wireguard/noise.h"
@@ -30,7 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 #include "debug.h"
 
 static int wireguard_netif_lookup_peer(gnrc_netif_t *netif, uint8_t peer_idx,
@@ -79,6 +72,7 @@ static int _netif_init(gnrc_netif_t *netif) {
 static int _netif_send(gnrc_netif_t *netif, gnrc_pktsnip_t *pkt) {
   assert(netif);
   assert(netif->dev);
+  printf("hello\n");
   int res = 0;
   ipv6_hdr_t *hdr;
   ipv6_addr_t addr;
@@ -194,6 +188,7 @@ int gnrc_netif_wireguard_add_peer(gnrc_netif_t *netif,
       return -EINVAL;
     }
     p->endpoint = peer->remote;
+    DEBUG("add peer: %d\n", peer->remote.netif);
     p->latest_endpoint = p->endpoint;
     if (peer->keep_alive == WIREGUARD_KEEPALIVE_DEFAULT) {
       p->keepalive_interval = KEEPALIVE_TIMEOUT;
@@ -250,6 +245,7 @@ int gnrc_netif_wireguard_connect(gnrc_netif_t *netif, uint8_t peer_idx) {
         peer->endpoint.port > 0) {
       /* Set the flag to indictate we want to actively connect */
       peer->active = true;
+      DEBUG("peer: %d\n", peer->endpoint.netif);
       peer->latest_endpoint = peer->endpoint;
       result = 0;
     } else {
@@ -277,8 +273,8 @@ int gnrc_netif_wireguard_peer_is_up(gnrc_netif_t *netif, uint8_t peer_idx,
   struct wg_peer *peer;
   int result = wireguard_netif_lookup_peer(netif, peer_idx, &peer);
   if (result >= 0) {
-    if ((peer->keypairs.current_keypair.is_valid) ||
-        (peer->keypairs.previous_keypair.is_valid)) {
+    if ((peer->keypairs.current_keypair.valid) ||
+        (peer->keypairs.previous_keypair.valid)) {
       result = 0;
     } else {
       result = -ENOKEY;

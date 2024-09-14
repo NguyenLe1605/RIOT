@@ -56,7 +56,8 @@ static void wireguard_receive_handshake_packet(wireguard_t *wg, uint8_t *buf,
   if (type == MESSAGE_HANDSHAKE_COOKIE) {
     DEBUG("wireguard_receive: receving cookie\n");
     if (wg_cookie_message_consume((struct message_cookie_reply *)buf, wg)) {
-      memcpy(&peer->latest_endpoint, remote, sizeof(sock_udp_ep_t));
+      peer->latest_endpoint = *remote;
+      // memcpy(&peer->latest_endpoint, remote, sizeof(sock_udp_ep_t));
     }
     return;
   }
@@ -132,6 +133,7 @@ static void wireguard_receive_handshake_packet(wireguard_t *wg, uint8_t *buf,
       wireguard_send_keepalive(peer);
       wg->netdev.event_callback(&wg->netdev, NETDEV_EVENT_LINK_UP);
     }
+    break;
   }
   }
 }
@@ -358,6 +360,7 @@ static void _receive(sock_udp_t *sock, sock_async_flags_t type, void *arg) {
     wireguard_receive_handshake_packet(wg, stackbuf, res, &remote,
                                        message_type);
     wg->num_handshake--;
+    break;
   }
   case MESSAGE_DATA: {
     struct message_transport_data *msg_data =
@@ -439,6 +442,9 @@ static int _init(netdev_t *dev) {
   result = 0;
   wg = container_of(dev, wireguard_t, netdev);
 
+  wg_noise_init();
+  wg_cookie_checker_init(&wg->cookie_checker, wg);
+
   key_len = BASE64_PRIVATE_KEY_LEN;
   private_key_len = key_len;
   if (base64_decode(wg->param->private_key, key_len, (void *)private_key,
@@ -466,9 +472,6 @@ static int _init(netdev_t *dev) {
     wireguard_cleanup(wg);
     return result;
   }
-
-  wg_noise_init();
-  wg_cookie_checker_init(&wg->cookie_checker, wg);
 
   /* set callback to handle receiving UDP packet */
   sock_udp_set_cb(&wg->udp, _receive, (void *)wg);
@@ -520,7 +523,8 @@ int wireguard_send_handshake_initiation(struct wg_peer *peer) {
         wireguard_send_buffer_to_peer(peer, (uint8_t *)&packet, sizeof(packet));
 
     if (result < 0) {
-      DEBUG("wireguard_send: could not send handshake initiation\n");
+      DEBUG("wireguard_send: could not send handshake initiation - %d\n",
+            result);
     }
 
     peer->send_handshake = false;

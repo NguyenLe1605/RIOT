@@ -44,7 +44,7 @@
 
 #include "net/gnrc/ipv6.h"
 
-#define ENABLE_DEBUG        0
+#define ENABLE_DEBUG        1
 #include "debug.h"
 
 #define _MAX_L2_ADDR_LEN    (8U)
@@ -496,10 +496,12 @@ static void _send_unicast(gnrc_pktsnip_t *pkt, bool prep_hdr,
 {
     gnrc_ipv6_nib_nc_t nce;
 
-    DEBUG("ipv6: send unicast\n");
 #ifdef MODULE_GNRC_WIREGUARD
-    DEBUG("ipv6: send to wireguard interface\n");
+    if (!netif) {
+        netif = gnrc_netif_get_by_ipv6_addr(&ipv6_hdr->src);
+    }
     if (netif && netif->device_type == NETDEV_TYPE_WIREGUARD) {
+        DEBUG("ipv6: send to wireguard interface\n");
         memset(nce.l2addr, 0, sizeof(nce.l2addr));
         nce.l2addr_len = 0;
         goto ipv6send;
