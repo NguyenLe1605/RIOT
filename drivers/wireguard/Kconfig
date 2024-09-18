@@ -1,0 +1,19 @@
+# Copyright (c) 2024 NguyenLe1605
+#
+# This file is subject to the terms and conditions of the GNU Lesser
+# General Public License v2.1. See the file LICENSE in the top level
+# directory for more details.
+
+config MODULE_WIREGUARD
+    bool "wireguard"
+    depends on TEST_KCONFIG
+    select PACKAGE_C25519
+    select PACKAGE_LIBB2
+    select MODULE_
+    select MODULE_CRYPTO
+    select MODULE_GNRC_IPV6
+    select MODULE_GNRC_NETIF
+    select MODULE_PRNG_SHA256PRNG
+    select MODULE_RANDOM
+    select MODULE_SOCK_UDP
+    select MODULE_ZTIMER_MSEC

@@ -1,0 +1,13 @@
+USEMODULE +=
+USEMODULE += netdev_default
+USEMODULE += base64
+USEMODULE += crypto
+USEMODULE += gnrc_ipv6
+USEMODULE += gnrc_netif
+USEMODULE += prng_sha256prng
+USEMODULE += random
+USEMODULE += sock_udp
+USEMODULE += ztimer_msec
+USEMODULE += sock_async_event
+USEPKG += c25519
+USEPKG += libb2
