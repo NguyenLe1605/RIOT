@@ -22,7 +22,6 @@
 #define WIREGUARD_H
 
 #include "net/gnrc/netif.h"
-#include "net/gnrc/pkt.h"
 #include "net/netdev.h"
 #include "net/sock/udp.h"
 #include "wireguard_constants.h"
@@ -62,7 +61,6 @@ typedef struct wireguard_device {
   gnrc_netif_t *netif;
   /* event queue for packet receiving event */
   event_queue_t *evq;
-  size_t num_events;
   /* static private keypairs binding to the device  */
   struct noise_static_identity static_identity;
   struct wireguard_peer peers[MAX_PEERS_PER_DEVICE];

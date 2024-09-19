@@ -246,8 +246,9 @@ struct wireguard_peer *wireguard_noise_handshake_consume_initiation(
   replay_attack =
       memcmp(t, handshake->greatest_timestamp, NOISE_TIMESTAMP_LEN) <= 0;
   /* we can only get 2 maximum initiations per peer every second */
-  flood_attack =
-      peer->last_initiation_rx + (MS_PER_SEC / INITIATIONS_PER_SECOND) > now;
+  flood_attack = handshake->last_initiation_consumption +
+                     (MS_PER_SEC / INITIATIONS_PER_SECOND) >
+                 now;
 
   if (replay_attack || flood_attack)
     goto out;
@@ -260,8 +261,8 @@ struct wireguard_peer *wireguard_noise_handshake_consume_initiation(
   memcpy(handshake->chaining_key, chaining_key, NOISE_HASH_LEN);
   handshake->remote_index = byteorder_ltohl(src->sender_index);
   now = ztimer_now(ZTIMER_MSEC);
-  if (peer->last_initiation_rx < now) {
-    peer->last_initiation_rx = now;
+  if (handshake->last_initiation_consumption < now) {
+    handshake->last_initiation_consumption = now;
   }
   handshake->state = HANDSHAKE_CONSUMED_INITIATION;
   handshake->handshaking = true;
@@ -459,6 +460,18 @@ bool wireguard_noise_received_with_keypair(
          sizeof(struct noise_keypair));
   wireguard_noise_destroy_keypair(&keypairs->next_keypair);
   return true;
+}
+
+void wireguard_noise_keypairs_clear(struct noise_keypairs *keypairs) {
+  wireguard_noise_destroy_keypair(&keypairs->next_keypair);
+  wireguard_noise_destroy_keypair(&keypairs->current_keypair);
+  wireguard_noise_destroy_keypair(&keypairs->previous_keypair);
+}
+
+void wireguard_noise_handshake_clear(struct noise_handshake *handshake) {
+  handshake->handshaking = false;
+  handshake->local_index = 0;
+  handshake_zero(handshake);
 }
 
 static void ecdh_generate_private_key(uint8_t *key) {

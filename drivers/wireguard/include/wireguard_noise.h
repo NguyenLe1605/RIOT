@@ -97,6 +97,7 @@ struct noise_handshake {
   /* 5.1 Silence is a Virtue: The responder keeps track of the greatest
    * timestamp received per peer */
   uint8_t greatest_timestamp[NOISE_TIMESTAMP_LEN];
+  uint32_t last_initiation_consumption;
 };
 
 struct wireguard_peer;
@@ -141,6 +142,9 @@ wireguard_noise_reset_last_sent_handshake(uint32_t *handshake_ms) {
 void wireguard_noise_destroy_keypair(struct noise_keypair *keypair);
 bool wireguard_noise_received_with_keypair(
     struct noise_keypairs *keypairs, struct noise_keypair *received_keypair);
+void wireguard_noise_keypairs_clear(struct noise_keypairs *keypairs);
+
+void wireguard_noise_handshake_clear(struct noise_handshake *handshake);
 
 #ifdef __cplusplus
 }

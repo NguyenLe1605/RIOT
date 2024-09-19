@@ -22,6 +22,7 @@
 #include "blake2.h"
 #include "c25519.h"
 #include "crypto/chacha20poly1305.h"
+#include "time_units.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -91,6 +92,7 @@ enum limits {
   /* Maximum number of handshake initiation per second */
   INITIATIONS_PER_SECOND = 2,
   MAX_TIMER_HANDSHAKES = 90 / REKEY_TIMEOUT,
+  REKEY_TIMEOUT_JITTER_MAX_MS = MS_PER_SEC / 3,
 };
 
 #ifdef __cplusplus

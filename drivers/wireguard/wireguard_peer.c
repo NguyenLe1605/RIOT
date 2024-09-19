@@ -6,6 +6,7 @@
 #include "wireguard_cookie.h"
 #include "wireguard_internal.h"
 #include "wireguard_noise.h"
+#include "wireguard_timer.h"
 
 #define ENABLE_DEBUG 1
 #include "debug.h"
@@ -22,12 +23,14 @@ bool wireguard_peer_init(struct wireguard_device *wg,
   /* clean up the peer */
   memset(peer, 0, sizeof(struct wireguard_peer));
   peer->device = wg;
+  peer->queue_entry = NULL;
   peer->valid = wireguard_noise_handshake_init(
       &peer->handshake, &wg->static_identity, public_key, preshared_key, peer);
   if (peer->valid) {
     wireguard_cookie_init(&peer->latest_cookie);
     wireguard_cookie_checker_precompute_peer_keys(peer);
-    wireguard_noise_reset_last_sent_handshake(&peer->last_initiation_tx);
+    wireguard_noise_reset_last_sent_handshake(&peer->last_sent_handshake);
+    wireguard_timers_init(peer);
   }
   return peer->valid;
 }
@@ -105,27 +108,6 @@ struct wireguard_peer *wireguard_peer_lookup_by_index(
     result = &peers[index];
   }
   return result;
-}
-
-static void wireguard_handshake_init_handler(event_t *evt) {
-  handshake_event_t *hs_evt = container_of(evt, handshake_event_t, super);
-  wireguard_send_handshake_initiation(hs_evt->peer);
-}
-
-int wireguard_sched_handshake_init(struct wireguard_peer *peer) {
-  assert(peer);
-  int result = 0;
-  /* Set the flag to indictate we want to actively connect */
-  peer->active = true;
-  result = wireguard_set_endpoint(&peer->latest_endpoint,
-                                  peer->device->netif->pid, &peer->endpoint);
-  if (result < 0) {
-    return result;
-  }
-  peer->handshake_init_evt = (handshake_event_t){
-      .super.handler = wireguard_handshake_init_handler, .peer = peer};
-  event_post(peer->device->evq, &peer->handshake_init_evt.super);
-  return 0;
 }
 
 struct wireguard_peer *wireguard_peer_lookup_by_handshake_receiver(

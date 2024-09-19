@@ -39,6 +39,12 @@ uint32_t wireguard_generate_unique_index(wireguard_t *dev);
 int wireguard_set_endpoint(sock_udp_ep_t *endpoint, unsigned int iface,
                            sock_udp_ep_t *remote);
 int wireguard_send_keepalive(struct wireguard_peer *peer);
+void wireguard_recv(sock_udp_t *sock, sock_async_flags_t flags, void *args);
+int wireguard_send_cookie_reply(wireguard_t *wg, uint8_t *buf, size_t len,
+                                sock_udp_ep_t *remote, uint32_t index);
+int wireguard_send_queuing_packets(struct wireguard_peer *peer);
+void wireguard_sched_handshake_init(struct wireguard_peer *peer, bool is_retry);
+void wireguard_purge_queuing_packets(struct wireguard_peer *peer);
 #ifdef __cplusplus
 }
 #endif

@@ -19,6 +19,9 @@
 #ifndef WIREGUARD_PEER_H
 #define WIREGUARD_PEER_H
 
+#include "event/timeout.h"
+#include "net/gnrc/pkt.h"
+#include "net/gnrc/pktqueue.h"
 #include "net/ipv6/addr.h"
 #include "net/sock/udp.h"
 #include "wireguard_constants.h"
@@ -35,7 +38,7 @@ struct wireguard_device;
 typedef struct {
   event_t super;
   struct wireguard_peer *peer;
-} handshake_event_t;
+} peer_event_t;
 
 struct wireguard_allowed_ip {
   bool valid;
@@ -56,11 +59,13 @@ struct wireguard_peer {
   /* latest received endpoint */
   sock_udp_ep_t latest_endpoint;
   /* keep-alive interval in seconds, 0 is disable */
-  uint16_t keepalive_interval;
+  uint16_t persistent_keepalive_interval;
   /* index of peer */
   uint8_t peer_idx;
   struct wireguard_allowed_ip allowed_source_ips[MAX_SRC_IPS];
-  handshake_event_t handshake_init_evt;
+  peer_event_t handshake_init_evt;
+  peer_event_t send_queue_evt;
+  uint32_t last_sent_handshake;
   /* The last time we received a valid initiation message */
   uint32_t last_initiation_rx;
   /* The last time we sent an initiation message to this peer */
@@ -69,7 +74,30 @@ struct wireguard_peer {
   uint32_t last_tx;
   uint32_t last_rx;
 
+  /* whether the session is meeting the REJECT_AFTER_TIME deadline sooner than
+   * the KEEPALIVE_TIMEOUT */
+  bool sent_lastminute_handshake;
+
+  gnrc_pktqueue_t *queue_entry;
+  unsigned int handshake_attempts;
+
   struct cookie latest_cookie;
+
+  event_timeout_t send_keepalive_timeout;
+  event_t send_keepalive_event;
+  bool timer_need_another_keepalive;
+
+  event_timeout_t persistent_keepalive_timeout;
+  event_t persistent_keepalive_event;
+
+  event_timeout_t zero_out_keypairs_timeout;
+  event_t zero_out_keypairs_event;
+
+  event_timeout_t retransmit_handshake_timeout;
+  event_t retransmit_handshake_event;
+
+  event_timeout_t new_handshake_timeout;
+  event_t new_handshake_event;
 };
 
 bool wireguard_peer_init(struct wireguard_device *wg,
@@ -89,8 +117,6 @@ wireguard_peer_alloc(struct wireguard_peer peers[MAX_PEERS_PER_DEVICE]);
 
 struct wireguard_peer *wireguard_peer_lookup_by_index(
     struct wireguard_peer peers[MAX_PEERS_PER_DEVICE], uint8_t index);
-
-int wireguard_sched_handshake_init(struct wireguard_peer *peer);
 
 struct wireguard_peer *wireguard_peer_lookup_by_handshake_receiver(
     struct wireguard_peer peers[MAX_PEERS_PER_DEVICE], uint32_t receiver_index);

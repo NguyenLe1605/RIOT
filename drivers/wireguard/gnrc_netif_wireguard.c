@@ -150,11 +150,7 @@ int gnrc_netif_wireguard_add_peer(gnrc_netif_t *netif,
     }
     p->endpoint = peer->endpoint;
     p->latest_endpoint = p->endpoint;
-    if (peer->persistent_keepalive == WIREGUARD_KEEPALIVE_DEFAULT) {
-      p->keepalive_interval = KEEPALIVE_TIMEOUT;
-    } else {
-      p->keepalive_interval = peer->persistent_keepalive;
-    }
+    p->persistent_keepalive_interval = peer->persistent_keepalive;
     for (i = 0; i < peer->allowed_ips_len; i++) {
       ip = peer->allowed_ips + i;
       wireguard_peer_add_ip(p, &ip->addr, ip->pfx_len);
@@ -208,7 +204,7 @@ int gnrc_netif_wireguard_connect(gnrc_netif_t *netif, uint8_t peer_idx) {
   /* check if a valid ip and port have been set */
   if (!ipv6_addr_is_unspecified((ipv6_addr_t *)peer->endpoint.addr.ipv6) &&
       peer->endpoint.port > 0) {
-    result = wireguard_sched_handshake_init(peer);
+    wireguard_sched_handshake_init(peer, false);
   }
   return result;
 }

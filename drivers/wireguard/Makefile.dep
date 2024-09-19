@@ -9,5 +9,6 @@ USEMODULE += random
 USEMODULE += sock_udp
 USEMODULE += ztimer_msec
 USEMODULE += sock_async_event
+USEMODULE += event_timeout_ztimer
 USEPKG += c25519
 USEPKG += libb2

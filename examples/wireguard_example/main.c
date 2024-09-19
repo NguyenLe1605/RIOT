@@ -73,13 +73,14 @@ int main(void) {
       .addr.ipv6 = {0x20, 0x01, 0x0d, 0xb8, 0x1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     2},
   };
+  peer.persistent_keepalive = 0;
   res = gnrc_netif_wireguard_add_peer(&wg_netif, &peer, &peer_idx);
   assert(res >= 0);
   assert(wg_dev.peers[peer_idx].valid);
   assert(peer_idx != WIREGUARD_INVALID_INDEX);
 
-  res = gnrc_netif_wireguard_connect(&wg_netif, peer_idx);
-  assert(res >= 0);
+  // res = gnrc_netif_wireguard_connect(&wg_netif, peer_idx);
+  // assert(res >= 0);
 
   sock_udp_ep_t server = {
       .port = 12345,
@@ -94,7 +95,7 @@ int main(void) {
       .netif = wg_netif.pid,
       .addr.ipv6 = {0xfd, 00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
 
-  ztimer_sleep(ZTIMER_MSEC, 3000);
+  // ztimer_sleep(ZTIMER_MSEC, 3000);
   if (sock_udp_create(&sock, &server, NULL, 0) < 0) {
     printf("can not create sock\n");
     return 0;
