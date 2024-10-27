@@ -1,6 +1,7 @@
 #include "gnrc_netif_wireguard.h"
 #include "base64.h"
 #include "event.h"
+#include "mutex.h"
 #include "net/netdev.h"
 #include "random.h"
 #include "wireguard.h"
@@ -126,7 +127,7 @@ int gnrc_netif_wireguard_add_peer(gnrc_netif_t *netif,
   wireguard_t *wg = container_of(netif->dev, wireguard_t, netdev);
 
   int result;
-  struct wireguard_peer *peers = wg->peers;
+  struct wireguard_peers *peers = &wg->peers;
   struct wireguard_peer *p = NULL;
   if (base64_decode(peer->public_key, netif_pubkey_len, public_key,
                     &public_key_len) != BASE64_SUCCESS ||
@@ -177,7 +178,7 @@ static int wireguard_netif_lookup_peer(gnrc_netif_t *netif, uint8_t peer_idx,
   struct wireguard_peer *peer = NULL;
   int result = 0;
   if (wg->valid) {
-    peer = wireguard_peer_lookup_by_index(wg->peers, peer_idx);
+    peer = wireguard_peer_lookup_by_index(&wg->peers, peer_idx);
     if (peer) {
       result = 0;
     } else {
@@ -212,18 +213,19 @@ int gnrc_netif_wireguard_connect(gnrc_netif_t *netif, uint8_t peer_idx) {
 uint32_t wireguard_generate_unique_index(wireguard_t *wg) {
   /* generate 32-bit random index that has not been used by any valid handshake
    * or key */
-  struct wireguard_peer *peers = wg->peers;
+  struct wireguard_peers *peers = &wg->peers;
   uint32_t result;
   int i;
   struct wireguard_peer *peer = NULL;
   bool existing = false;
+  mutex_lock(&peers->mtx);
   do {
     do {
       result = random_uint32();
     } while (result == 0 || result == 0xFFFFFFFF);
     /* check if the index has been existed or not for the whole device */
     for (i = 0; i < MAX_PEERS_PER_DEVICE; ++i) {
-      peer = &peers[i];
+      peer = &peers->peers[i];
       if (peer->valid) {
         existing |= peer->keypairs.current_keypair.valid &&
                     result == peer->keypairs.current_keypair.local_index;
@@ -236,5 +238,6 @@ uint32_t wireguard_generate_unique_index(wireguard_t *wg) {
       }
     }
   } while (existing);
+  mutex_unlock(&peers->mtx);
   return result;
 }

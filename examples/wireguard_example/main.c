@@ -26,7 +26,6 @@
 #include "net/sock/udp.h"
 #include "wireguard.h"
 #include "wireguard_constants.h"
-#include "ztimer.h"
 #include <stdio.h>
 
 static char wg_netif_stack[WIREGUARD_NETIF_STACKSIZE];
@@ -43,6 +42,8 @@ int main(void) {
       .private_key = "yOvAL8A5/kEEMoTC7ZSrJejUETQgIUS6f5DIt7amMW0=",
   };
   wireguard_setup(&wg_dev, &param, 0);
+  // TODO: hardcode netif number 5 here, need a better way to find the
+  // bind_netif
   gnrc_netif_t *bind_netif = gnrc_netif_get_by_pid(5);
   assert(bind_netif);
   ipv6_addr_t bind_addr = (ipv6_addr_t){
@@ -76,16 +77,11 @@ int main(void) {
   peer.persistent_keepalive = 0;
   res = gnrc_netif_wireguard_add_peer(&wg_netif, &peer, &peer_idx);
   assert(res >= 0);
-  assert(wg_dev.peers[peer_idx].valid);
   assert(peer_idx != WIREGUARD_INVALID_INDEX);
-
-  // res = gnrc_netif_wireguard_connect(&wg_netif, peer_idx);
-  // assert(res >= 0);
 
   sock_udp_ep_t server = {
       .port = 12345,
       .family = AF_INET6,
-      // .netif = wg_netif.pid,
       .addr = {{0xfd, 00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}},
   };
 
@@ -95,7 +91,6 @@ int main(void) {
       .netif = wg_netif.pid,
       .addr.ipv6 = {0xfd, 00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
 
-  // ztimer_sleep(ZTIMER_MSEC, 3000);
   if (sock_udp_create(&sock, &server, NULL, 0) < 0) {
     printf("can not create sock\n");
     return 0;
@@ -112,7 +107,5 @@ int main(void) {
     return -1;
   }
   printf("%s\n", buf);
-
-  puts("Generated RIOT application: 'wireguard_example'");
   return 0;
 }

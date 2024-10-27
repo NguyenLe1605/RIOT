@@ -1,0 +1,9 @@
+[Interface]
+ListenPort = 51820
+PrivateKey = iDOmdGQTYljMS5Bpefea/iu9ThkhC3wr+Cfj5pBKFH4=
+
+[Peer]
+PublicKey = l2cmal844CCbMqVksV+nSAjTqn0SSnsawflIqGIJalw=
+AllowedIPs = fd00::2/128
+Endpoint = 2001:0db8:0100::1:51820
+

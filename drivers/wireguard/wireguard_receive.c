@@ -65,7 +65,7 @@ void wireguard_recv(sock_udp_t *sock, sock_async_flags_t flags, void *args) {
     struct message_transport_data *msg_data =
         (struct message_transport_data *)stackbuf;
     uint32_t receiver = byteorder_ltohl(msg_data->receiver_idx);
-    peer = wireguard_peer_lookup_by_keypair_receiver(wg->peers, receiver);
+    peer = wireguard_peer_lookup_by_keypair_receiver(&wg->peers, receiver);
     if (peer) {
       wireguard_consume_data(peer, msg_data, res - TRANSPORT_DATA_HEADER_LEN,
                              &remote);
@@ -240,7 +240,7 @@ static void wireguard_consume_data(struct wireguard_peer *peer,
   }
 
   /* check the IP address against the routing table */
-  routed_peer = wireguard_peer_lookup_by_allowed_ip(wg->peers, &iphdr->src);
+  routed_peer = wireguard_peer_lookup_by_allowed_ip(&wg->peers, &iphdr->src);
   if (routed_peer != peer) {
     /* dishonest peer */
     DEBUG("[wireguard] receive: packet has unallowed src IPs\n");

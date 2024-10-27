@@ -20,6 +20,7 @@
 #define WIREGUARD_PEER_H
 
 #include "event/timeout.h"
+#include "mutex.h"
 #include "net/gnrc/pkt.h"
 #include "net/gnrc/pktqueue.h"
 #include "net/ipv6/addr.h"
@@ -100,6 +101,11 @@ struct wireguard_peer {
   event_t new_handshake_event;
 };
 
+struct wireguard_peers {
+  struct wireguard_peer peers[MAX_PEERS_PER_DEVICE];
+  mutex_t mtx;
+};
+
 bool wireguard_peer_init(struct wireguard_device *wg,
                          struct wireguard_peer *peer,
                          const uint8_t public_key[NOISE_PUBLIC_KEY_LEN],
@@ -108,24 +114,26 @@ bool wireguard_peer_init(struct wireguard_device *wg,
 bool wireguard_peer_add_ip(struct wireguard_peer *peer, ipv6_addr_t *allowed_ip,
                            unsigned int pfx_len);
 
-struct wireguard_peer *wireguard_peer_lookup_by_pubkey(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE],
-    const uint8_t pubkey[NOISE_PUBLIC_KEY_LEN]);
+struct wireguard_peer *
+wireguard_peer_lookup_by_pubkey(struct wireguard_peers *peers,
+                                const uint8_t pubkey[NOISE_PUBLIC_KEY_LEN]);
+
+struct wireguard_peer *wireguard_peer_alloc(struct wireguard_peers *peers);
 
 struct wireguard_peer *
-wireguard_peer_alloc(struct wireguard_peer peers[MAX_PEERS_PER_DEVICE]);
+wireguard_peer_lookup_by_index(struct wireguard_peers *peers, uint8_t index);
 
-struct wireguard_peer *wireguard_peer_lookup_by_index(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE], uint8_t index);
+struct wireguard_peer *
+wireguard_peer_lookup_by_handshake_receiver(struct wireguard_peers *peers,
+                                            uint32_t receiver_index);
 
-struct wireguard_peer *wireguard_peer_lookup_by_handshake_receiver(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE], uint32_t receiver_index);
+struct wireguard_peer *
+wireguard_peer_lookup_by_allowed_ip(struct wireguard_peers *peers,
+                                    const ipv6_addr_t *addr);
 
-struct wireguard_peer *wireguard_peer_lookup_by_allowed_ip(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE], const ipv6_addr_t *addr);
-
-struct wireguard_peer *wireguard_peer_lookup_by_keypair_receiver(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE], uint32_t receiver);
+struct wireguard_peer *
+wireguard_peer_lookup_by_keypair_receiver(struct wireguard_peers *peers,
+                                          uint32_t receiver);
 #endif
 
 #ifdef __cplusplus

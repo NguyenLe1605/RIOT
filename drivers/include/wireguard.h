@@ -63,7 +63,7 @@ typedef struct wireguard_device {
   event_queue_t *evq;
   /* static private keypairs binding to the device  */
   struct noise_static_identity static_identity;
-  struct wireguard_peer peers[MAX_PEERS_PER_DEVICE];
+  struct wireguard_peers peers;
   struct cookie_checker cookie_checker;
   /* invalid when the configured private key is not valid*/
   bool valid;

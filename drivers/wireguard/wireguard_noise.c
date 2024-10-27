@@ -227,7 +227,7 @@ struct wireguard_peer *wireguard_noise_handshake_consume_initiation(
     goto out;
 
   /* Lookup which peer we're actually talking to */
-  peer = wireguard_peer_lookup_by_pubkey(wg->peers, s);
+  peer = wireguard_peer_lookup_by_pubkey(&wg->peers, s);
   if (!peer)
     goto out;
   handshake = &peer->handshake;
@@ -342,7 +342,7 @@ struct wireguard_peer *wireguard_noise_handshake_consume_response(
     goto out;
 
   receiver = byteorder_ltohl(src->receiver_index);
-  peer = wireguard_peer_lookup_by_handshake_receiver(wg->peers, receiver);
+  peer = wireguard_peer_lookup_by_handshake_receiver(&wg->peers, receiver);
   if (!peer)
     goto out;
 

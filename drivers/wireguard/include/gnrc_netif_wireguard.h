@@ -26,7 +26,6 @@
 #include "net/gnrc/netif/internal.h"
 #include "net/netdev.h"
 #include "net/sock/udp.h"
-#include "wireguard_constants.h"
 #include "wireguard_peer.h"
 
 #ifdef __cplusplus

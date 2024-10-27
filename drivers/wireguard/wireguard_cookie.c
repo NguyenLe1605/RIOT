@@ -164,7 +164,7 @@ bool wireguard_cookie_message_consume(struct message_cookie_reply *src,
   size_t s;
   uint32_t receiver;
   receiver = byteorder_ltohl(src->receiver_idx);
-  peer = wireguard_peer_lookup_by_handshake_receiver(wg->peers, receiver);
+  peer = wireguard_peer_lookup_by_handshake_receiver(&wg->peers, receiver);
   if (peer == NULL)
     return false;
 

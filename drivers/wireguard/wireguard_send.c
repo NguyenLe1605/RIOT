@@ -62,7 +62,7 @@ int wireguard_send(wireguard_t *dev, gnrc_pktsnip_t *pkt) {
   ipv6_hdr_t *hdr = (ipv6_hdr_t *)pkt->data;
   ipv6_addr_t addr = hdr->dst;
 
-  peer = wireguard_peer_lookup_by_allowed_ip(dev->peers, &addr);
+  peer = wireguard_peer_lookup_by_allowed_ip(&dev->peers, &addr);
 
   if (!peer || !peer->valid) {
     /* if match no peer, the packet is dropped */

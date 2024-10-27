@@ -1,6 +1,7 @@
 #include "wireguard_peer.h"
 #include "crypto/helper.h"
 #include "event.h"
+#include "mutex.h"
 #include "wireguard.h"
 #include "wireguard_constants.h"
 #include "wireguard_cookie.h"
@@ -67,72 +68,80 @@ bool wireguard_peer_add_ip(struct wireguard_peer *peer, ipv6_addr_t *allowed_ip,
   return result;
 }
 
-struct wireguard_peer *wireguard_peer_lookup_by_pubkey(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE],
-    const uint8_t pubkey[NOISE_PUBLIC_KEY_LEN]) {
+struct wireguard_peer *
+wireguard_peer_lookup_by_pubkey(struct wireguard_peers *peers,
+                                const uint8_t pubkey[NOISE_PUBLIC_KEY_LEN]) {
   struct wireguard_peer *ret_peer = NULL;
   struct wireguard_peer *peer;
   int i = 0;
   if (peers == NULL) {
     return NULL;
   }
+  mutex_lock(&peers->mtx);
   for (i = 0; i < MAX_PEERS_PER_DEVICE; ++i) {
-    peer = &peers[i];
+    peer = &peers->peers[i];
     if (peer->valid && crypto_equals(pubkey, peer->handshake.remote_static,
                                      NOISE_PUBLIC_KEY_LEN)) {
       ret_peer = peer;
       break;
     }
   }
+  mutex_unlock(&peers->mtx);
   return ret_peer;
 }
 
-struct wireguard_peer *
-wireguard_peer_alloc(struct wireguard_peer peers[MAX_PEERS_PER_DEVICE]) {
+struct wireguard_peer *wireguard_peer_alloc(struct wireguard_peers *peers) {
   uint8_t i;
   struct wireguard_peer *peer = NULL;
+  mutex_lock(&peers->mtx);
   for (i = 0; i < MAX_PEERS_PER_DEVICE; ++i) {
-    peer = &peers[i];
+    peer = &peers->peers[i];
     if (!peer->valid) {
       peer->peer_idx = i;
       break;
     }
   }
+  mutex_unlock(&peers->mtx);
   return peer;
 }
 
-struct wireguard_peer *wireguard_peer_lookup_by_index(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE], uint8_t index) {
+struct wireguard_peer *
+wireguard_peer_lookup_by_index(struct wireguard_peers *peers, uint8_t index) {
   struct wireguard_peer *result = NULL;
-  if (index < MAX_PEERS_PER_DEVICE && peers[index].valid) {
-    result = &peers[index];
+  mutex_lock(&peers->mtx);
+  if (index < MAX_PEERS_PER_DEVICE && peers->peers[index].valid) {
+    result = &peers->peers[index];
   }
+  mutex_unlock(&peers->mtx);
   return result;
 }
 
-struct wireguard_peer *wireguard_peer_lookup_by_handshake_receiver(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE],
-    uint32_t receiver_index) {
+struct wireguard_peer *
+wireguard_peer_lookup_by_handshake_receiver(struct wireguard_peers *peers,
+                                            uint32_t receiver_index) {
   struct wireguard_peer *ret_peer = NULL;
   struct wireguard_peer *peer;
   int i = 0;
   if (peers == NULL) {
     return NULL;
   }
+
+  mutex_lock(&peers->mtx);
   for (i = 0; i < MAX_PEERS_PER_DEVICE; ++i) {
-    peer = &peers[i];
+    peer = &peers->peers[i];
     if (peer->valid && peer->handshake.handshaking &&
         peer->handshake.local_index == receiver_index) {
       ret_peer = peer;
       break;
     }
   }
+  mutex_unlock(&peers->mtx);
   return ret_peer;
 }
 
-struct wireguard_peer *wireguard_peer_lookup_by_allowed_ip(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE],
-    const ipv6_addr_t *addr) {
+struct wireguard_peer *
+wireguard_peer_lookup_by_allowed_ip(struct wireguard_peers *peers,
+                                    const ipv6_addr_t *addr) {
   struct wireguard_peer *peer = NULL;
   struct wireguard_peer *tmp;
   struct wireguard_allowed_ip *allowed;
@@ -141,8 +150,9 @@ struct wireguard_peer *wireguard_peer_lookup_by_allowed_ip(
   size_t i;
   size_t j;
 
+  mutex_lock(&peers->mtx);
   for (i = 0; i < MAX_PEERS_PER_DEVICE; ++i) {
-    tmp = &peers[i];
+    tmp = &peers->peers[i];
     if (!tmp->valid) {
       continue;
     }
@@ -162,21 +172,25 @@ struct wireguard_peer *wireguard_peer_lookup_by_allowed_ip(
       }
       /* found the exact match on the ipv6 address destination */
       if (best_match == IPV6_ADDR_BIT_LEN) {
+        mutex_unlock(&peers->mtx);
         return peer;
       }
     }
   }
+  mutex_unlock(&peers->mtx);
   return peer;
 }
 
-struct wireguard_peer *wireguard_peer_lookup_by_keypair_receiver(
-    struct wireguard_peer peers[MAX_PEERS_PER_DEVICE], uint32_t receiver) {
+struct wireguard_peer *
+wireguard_peer_lookup_by_keypair_receiver(struct wireguard_peers *peers,
+                                          uint32_t receiver) {
   struct wireguard_peer *result = NULL;
   struct wireguard_peer *tmp;
   struct noise_keypairs *keypairs;
   int x;
+  mutex_lock(&peers->mtx);
   for (x = 0; x < MAX_PEERS_PER_DEVICE; x++) {
-    tmp = &peers[x];
+    tmp = &peers->peers[x];
     if (tmp->valid) {
       keypairs = &tmp->keypairs;
       if ((keypairs->current_keypair.valid &&
@@ -190,5 +204,6 @@ struct wireguard_peer *wireguard_peer_lookup_by_keypair_receiver(
       }
     }
   }
+  mutex_unlock(&peers->mtx);
   return result;
 }
